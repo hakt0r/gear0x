@@ -1,0 +1,26 @@
+#!/bin/sh
+build(){
+  _depend_apt_lib libc6
+  _depend_apt_lib libnss3
+  _depend_apt brctl bridge-utils 
+  _depend_apt iw
+  _depend_apt iwconfig wireless-tools
+  _depend_apt wpa_supplicant wpasupplicant
+  _depend_apt hostapd; }
+
+install(){ # (: install networking :) - optimize take only what we need
+  echo gear                     > $DESTDIR/etc/hostname
+  echo 127.0.0.1 localhost gear > $DESTDIR/etc/hosts
+  echo nameserver 8.8.8.8       > $DESTDIR/etc/resolv.conf
+  echo order hosts,bind         > $DESTDIR/etc/host.conf
+  echo hosts: files dns         > $DESTDIR/etc/nsswitch.conf
+
+  printf '[\e[31mnetlibs\e[0m] '
+  for l in libnss_files.so libnss_dns.so libnss3.so libnss_compat.so libnssutil3.so libresolv.so
+   do _steal_lib $l; done
+  _done
+  rm -f $DESTDIR/bin/brctl
+  _steal_app \
+    brctl iw iwevent iwspy iwpriv iwgetid iwconfig iwlist  \
+    wpa_action wpa_passphrase wpa_supplicant wpa_cli \
+    hostapd; }

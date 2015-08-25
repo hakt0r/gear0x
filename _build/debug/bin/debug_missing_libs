@@ -1,0 +1,2 @@
+#!/bin/sh
+ldd /lib/* 2>&1 | grep "not found" | sort | uniq | awk 'BEGIN{ORS=" "}{print $1}'

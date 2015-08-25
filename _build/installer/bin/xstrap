@@ -1,0 +1,38 @@
+#!/bin/sh
+xstrap(){
+  # beef up PATH from our little worl of just having /bin
+  # having a working TMPDIR is crucial
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  TMPDIR=/run TMP=/run
+  local version="$1" mirror="$2"
+  test -z "$DESTDIR"  && return 1
+  test -z "$version" && version=jessie
+  test -z "$mirror"  && mirror=http://ftp.de.debian.org/debian
+  mkdir -p $DESTDIR/run
+  debootstrap \
+    ----no-check-gpg  \
+    --variant=minbase \
+    --arch=amd64 $version $DESTDIR $mirror
+  echo system          > $DESTDIR/.gearos/mount
+  echo debian:$version > $DESTDIR/.gearos/release;
+  # root
+  chroot $DESTDIR passwd
+  # apt-get
+  echo "\
+  deb $mirror/ $version main contrib non-free
+  deb $mirror/ $version-updates main contrib non-free
+  # deb $mirror/ $version-backports main
+  deb http://security.debian.org/ $version/updates main
+  " > $DESTDIR/etc/apt/sources.list
+
+  echo 'Acquire::Languages "none";' > $DESTDIR/etc/apt/apt.conf.d/99translations
+  chroot $DESTDIR apt-get update
+  chroot $DESTDIR apt-get install \
+    --no-install-recommends \
+    consolekit dialog dbus \
+    usb-utils pci-utils apt-utils \
+    net-tools wireless-tools openssh-server \
+    bzip2 unrar unlzma zip gzip \
+    man tmux vim sudo wget curl pv htop \
+    i3 slim xinit xserver-xorg-video-vesa; }
+xstrap "$1" "$2" "$3"

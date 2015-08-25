@@ -1,0 +1,97 @@
+#!/bin/sh
+
+enumerate(){ local i=0
+  [ -e $1 ] || { echo $1; return 0; }
+  while [ -e $1$i ]
+    do i=$(( $i +  1 )); [ "$i" -gt 255 ] && break
+  done; echo $1$i; }
+
+free_mount(){
+  basename $(enumerate /dev/mapper/luks); }
+
+cryptomount_key(){ 
+  for uuid in $({ blk_uuids | sort | uniq -u; ls /boot/key/; } | sort | uniq -d)
+  do local mapdev=$(free_mount) blockdev=$(blk_byuuid $uuid)
+  if cat /boot/key/$uuid | cryptsetup -T1 luksOpen $blockdev $mapdev 2>/dev/null
+    then cryptomount_hooks
+  fi; done; true; }
+
+cryptomount_home(){ :; }
+
+cryptomount_storage(){ :; }
+
+cryptomount_system(){
+  local ok=true
+  for mnt in dev proc boot run sys lib/firmware lib/modules
+  do
+    mkdir -p /system/$mnt
+    mount -o bind /$mnt /system/$mnt || { ok=false; break; }
+  done
+  ok || return 1
+  for file in resolv.conf mtab fstab hostname hosts
+    do cat /etc/$file >/system/etc/$file 2>/dev/null
+  done; true; }
+
+cryptomount_postsystem(){
+  touch /run/trystart
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  exec switch_root /system /bin/systemd; }
+
+cryptomount_hooks(){
+  [ -z "$mapdev" -o -z "$blockdev" ] && return 1
+  mkdir -p /run/luks
+  _usplash menu set crypto "mounting: $blockdev[$mapdev]"
+  if mount /dev/mapper/$mapdev /run/luks;then
+    mounted="$mounted$blockdev:"
+    _usplash menu set crypto "mounted: $blockdev[$mapdev]"
+    if [ -d /run/luks/.gearos ]; then
+      if [ -f /run/luks/.gearos/mount ]; then
+        local dest=$(cat /run/luks/.gearos/mount)
+        local name=$(basename $dest)
+        hooks="$hooks:$name"
+        if [ -n "$dest" ]; then
+          mkdir -p /$dest
+          umount /run/luks
+          mount /dev/mapper/$mapdev /$dest 2>/dev/null
+          is_func "cryptomount_$name" && "cryptomount_$name"
+      fi;fi
+    else local dest=$(enumerate /boot/crypt)
+      umount /run/luks
+      mkdir -p $dest
+      mount /dev/mapper/$mapdev /$dest 2>/dev/null
+    fi
+  else _usplash menu set crypto "mount failed: $name $blockdev[$mapdev]";fi
+  _usplash menu set crypto "ready: $name $blockdev[$mapdev]"; true; }
+
+cryptomount(){
+  local devpass= blockdev= mounted=: hooks=:
+  for blockdev in $1 $(blk_crypts)
+  do local tries=1 success=true mapdev=$(free_mount)
+    printf "%s" "$mounted" | grep -qI ":$blockdev:" && continue
+    _usplash passwd devpass "Password for $blockdev[$mapdev]"
+    while ! printf "%s" "$devpass" | cryptsetup -T1 luksOpen $blockdev $mapdev 2>/dev/null; do
+      tries=$(( $tries + 1 ))
+      [ "$tries" -eq 4 ] && { success=false; break; }
+      _usplash yesno NULL "Wrong!!11elf Retry?" || { success=false; break; }
+    done
+    unset devpass
+    if $success
+      then cryptomount_hooks
+      else _usplash menu set crypto "mount failed: $blockdev"
+    fi
+  done
+  for dest in $(printf "$hooks"|tail -c +2|tr : "\n");do
+    _usplash menu set crypto "run: post_$dest"
+    is_func "cryptomount_post$dest" && "cryptomount_post$dest"
+  done; }
+
+cryptodetect(){
+  local blockdev= found= short=
+  lsmod | grep -qI dm_crypt || modprobe dm-crypt 2>/dev/null
+  lsmod | grep -qI xts      || modprobe xts      2>/dev/null
+  for blockdev in $(blk_crypts)
+  do short=$(basename $blockdev)
+    [ -z "$found" ] && found="$short" || found="$found,$short"
+    usplash menu item "crypto.$short" "decrypt [$short]" "run_target crypto $blockdev"
+  done
+  usplash menu set "crypto" "crypto[$found]"; }

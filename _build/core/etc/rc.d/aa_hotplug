@@ -1,0 +1,2 @@
+#!/bin/sh
+echo /bin/hotplug_event >/proc/sys/kernel/hotplug

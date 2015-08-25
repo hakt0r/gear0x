@@ -1,0 +1,3 @@
+mkdir /var
+ln -s /run /var/log
+ln -s /run /tmp

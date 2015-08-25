@@ -1,0 +1,4 @@
+#!/bin/sh
+modprobe cdc_acm &
+mkdir /run/dbus
+omxplayer -p -o hdmi /etc/splash.mp4 >/dev/null 2>&1 &

@@ -1,0 +1,47 @@
+#!/bin/sh
+PKGDETAILS_C=true
+
+build(){
+  if $PKGDETAILS_C && [ ! -f $SOURCES/pkgdetails ]
+  then
+    $(which wget) -O $SOURCES/pkgdetails.c "https://raw.githubusercontent.com/jolicloud/base-installer/master/pkgdetails.c"
+    ( cd $SOURCES; ${DEST_CROSS}gcc -o pkgdetails pkgdetails.c; )
+  elif [ ! -f $SOURCES/pkgdetails.sh ]
+  then
+    $(which wget) -O $SOURCES/pkgdetails.sh "https://raw.githubusercontent.com/dnschneid/crouton/master/installer/ubuntu/pkgdetails"
+  fi
+  _depend_apt ar binutils
+  _depend_apt gpg
+  _depend_apt openssl
+  _depend_apt debootstrap; }
+
+install(){
+  for f in dpkg-deb sed ar tar; do rm -f $DESTDIR/bin/$f;done
+  _steal_app mkfs.ext4 openssl gpg gpgv fsck.ext2 fsck.ext4 sed tar ar dpkg-deb
+
+  __patch(){ cat $1 | sed '
+    s|/usr/share/debootstrap|/lib/debootstrap|g
+    s|chmod +x|chmod a+x|g
+  ' > $2; }
+
+  cp -r /usr/share/debootstrap $DESTDIR/lib/
+
+  printf '[\e[31mdebootstrap\e[0m] '
+
+  __patch /usr/sbin/debootstrap            $DESTDIR/bin/debootstrap
+  __patch /usr/share/debootstrap/functions $DESTDIR/lib/debootstrap/functions
+
+  for s in /usr/share/debootstrap/scripts/*
+    do printf .; __patch $s $DESTDIR/lib/debootstrap/scripts/$(basename $s)
+  done; _done
+
+  if $PKGDETAILS_C
+  then
+    cp $SOURCES/pkgdetails $DESTDIR/lib/debootstrap
+  else
+    cat $SOURCES/pkgdetails.sh |
+    sed 's|sh -e|sh|g'         \
+    sed 's|mawk|awk|g'         \
+    >$DESTDIR/lib/debootstrap/pkgdetails
+  fi; chmod a+x $DESTDIR/lib/debootstrap/pkgdetails
+  chmod a+x $DESTDIR/bin/debootstrap; }

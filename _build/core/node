@@ -1,0 +1,19 @@
+#!/bin/sh
+
+build(){
+  ARCH=$(dpkg --print-architecture|sed 's/amd/x/')
+  FILE=node-v0.12.7-linux-${ARCH}.tar.gz
+  URL=https://nodejs.org/dist/v0.12.7/$FILE
+  test -f ./$FILE || {
+    echo fetch: $URL
+    $(which wget) $URL; }
+  ln -sf $FILE ./node.tar.gz; }
+
+install(){ (
+  cd $DESTDIR;
+  printf "installing nodejs "
+  tar xzvf ../node.tar.gz | awk '{if(i++%30==0)printf "."}END{print " done"}'
+  cp -r node-v0.12.7-linux-x64/* ./
+  rm -rf node-v0.12.7-linux-x64
+  mkdir license/node; mv README.md LICENSE ChangeLog license/node/; )
+  _steal_libs $DESTDIR/bin/node; }

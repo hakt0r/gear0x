@@ -1,0 +1,5 @@
+#!/bin/sh
+build(){ _depend_apt dropbear; }
+install(){
+  _steal_app dropbear dropbearkey dbclient;
+  ln $DESTDIR/bin/dbclient $DESTDIR/bin/ssh; }

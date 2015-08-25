@@ -1,0 +1,213 @@
+#!/bin/sh
+
+_exists(){ type $1 2>&1 | grep -iq function; }
+_is_app(){ which $1 >/dev/null 2>&1; }
+
+_version_increment(){ 
+  local v=$(printf "%d" $(cat $BUILD/version 2>/dev/null || printf 0))
+  printf "0x%x" "$(( $v + 1 ))" >$BUILD/version
+  _version; }
+
+_done(){ printf ' [\e[32mdone\e[0m]\n'; }
+_fail(){ printf ' [\e[31mfail\e[0m]\n'; }
+
+_git_source(){ local name="$1" url="$2"; shift 2
+  [ -d "$SOURCES/$name" ] || git clone --depth=1 "$url" "$SOURCES/$name" "$@"; }
+
+_arch_hook(){ local hook=$1; shift
+  if _exists ${hook}_$DESTARCH
+  then ${hook}_$DESTARCH "$@"
+  else ${hook}_default;fi; }
+
+_arch_file(){
+  local t=; [ -n "$1" ] && t=_$1
+  find $(find $BUILD -type d -name arch) -type f -name "$DESTARCH$t"; }
+
+_arch_include(){
+  local t=; [ -n "$1" ] && t=_$1
+  local f=$(find $(find $BUILD -type d -name arch) -type f -name "$DESTARCH$t")
+  [ -f "$f" ] && . "$f"; }
+
+_mount_devs(){ test -z "$1" && return 1
+  for d in proc sys dev; do
+    sudo umount $1/$d
+    sudo mount  -o bind /$d $1/$d
+  done; }
+
+_ccache(){
+  export PATH=/usr/lib/ccache:$PATH
+  export CC="ccache gcc"
+  export CXX="ccache g++"; }
+
+_require(){ target=$1; shift
+  depend(){ DEPEND=$(echo "$@"|awk -v d="$mod/" -v ORS=' ' -v RS=' ' '
+    BEGIN{IRS=" \n\t"}{gsub(/@/,d);print $1}'); }
+  __hook(){ #echo $n:$1;
+    _exists $1 && $1; }
+  __load(){
+    local DEPEND 
+    unset $target; unset pre$target; unset post$target
+    . $1
+    __hook pre$target;
+    __hook $target
+    [ -n "$1" ] && for d in $DEPEND; do (
+      DEPEND= _require $target $d; )
+    done
+    __hook post$target; }
+  __skel(){
+    if [ "$target" = build ]
+    then 
+      printf "[\e[33m$target\e[0m:\e[36mskel\e[0m:\e[35m$n\e[0m]"
+      for d in $(ls $BUILD/core/skel/)
+      do [ -d $m/$d ] && {
+        printf " $d"
+        cp -r $m/$d $DESTDIR/; }
+    done; _done; fi; }
+  for mod in $@; do
+    [ -z "$mod" ] && continue
+    n=$(basename "$mod")
+    m=$BUILD/$mod
+    if [ -f $m ]; then
+      printf "[\e[33m$target\e[0m:\e[35m$n\e[0m]\n"
+      __load $m
+    elif [ -d $m -a -f $m/$n ]; then
+      __load $m/$n
+      __skel
+    fi
+  done; true; }
+
+_dots(){ c=2; [ -n "$2" ] && c=$2
+  awk 'BEGIN{printf "'"$1"' "}{if(i++%'"$c"'==0)printf "."}END{print " [\x1b[32mdone\x1b[0m]"}'; }
+
+_generic_build(){ (
+  test -z "$SYSROOT" && SYSROOT=/
+  . $BUILD/lib/ccache
+  test -d $1 || git clone $2 $1
+  echo building: $1 from: $2
+  cd $1
+  test -f Makefile || {
+    c=./configure; test -f $c ||
+    c=./autogen.sh
+    $c \
+      --with-sysroot=$SYSROOT \
+      --prefix=$DESTDIR \
+      --libdir=$DESTDIR/lib \
+      --sysconfdir=$DESTDIR/etc; }
+  make -j 2 install; ); }
+
+_depend_apt_host(){
+  local bin=$1 lib=$2
+  test -z "$bin" && return 1
+  test -z "$lib" && lib=$1
+  which $bin >/dev/null 2>&1 || sudo apt-get install -y --no-install-recommends $lib; }
+
+_exec_build(){   __exec_$DESTARCH "$DESTDIR" "$1";  }
+_exec_debroot(){ __exec_$DESTARCH "$DEBROOT" "$1"; }
+
+__debroot(){
+  SCRIPT=testing
+  qemu-debootstrap --variant=minbase --no-check-gpg --arch=$DESTARCH_DEBIAN $SCRIPT $DEBROOT ftp://ftp.de.debian.org/debian/
+  echo 'Acquire::Languages "none";' > $DEBROOT/etc/apt/apt.conf.d/99translations
+  _exec_debroot "apt-get update"; }
+
+_depend_apt_lib(){
+  local i= need=; for i in $@; do [ -n "$(_exec_debroot "apt-cache policy $i| grep -i Installed:..none.")" ] && need="$need $i"; done
+  [ -n "$need" ] && _exec_debroot "apt-get install -y --no-install-recommends $need"; }
+
+_depend_apt(){
+  local bin=$1 lib=$2
+  test -z "$bin" && return 1
+  test -z "$lib" && lib=$1
+  bin=$(_exec_debroot "which $bin") 2>/dev/null
+  [ -z "$bin" ] && _exec_debroot "apt-get install -y --no-install-recommends $lib"; }
+
+_steal_app(){ (
+  for a in $@;do
+    test -f $DEBROOT/$a   || app=$(_exec_debroot "which $a")
+    test -f $DEBROOT/$app || { printf "\e[31m NOT FOUND: $a\e[0m\n"; return 1; }
+    printf "[\e[33mapp\e[0m:\e[35m$(basename $a)\e[0m] "
+    cp $DEBROOT/$app $DESTDIR/bin/
+    _steal_libs $app
+  done; ); }
+
+_steal_libs(){ (
+  local app=$1
+  [ -f "$app" ] || app=$(_exec_debroot "which $app") 
+  printf '\e[32m+\e[0m'
+  for dep in $(_exec_debroot "ldd $app"|awk '{print $1}'); do
+    _steal_lib $dep; done
+  _done; ); }
+
+_steal_lib(){ (
+  local LIB= dep=$(basename "$1")
+  local LIBS="/lib /usr/lib /lib/$DESTARCH_MULTI /usr/lib/$DESTARCH_MULTI $(cat $DEBROOT/etc/ld.so.conf.d/* | grep -v '^#')"
+  [ -z "$dep" -o "$dep" = 'not' -o -f $DESTDIR/$dep* ] && return 0
+  for lib in $LIBS; do
+    [ -e $DEBROOT$lib/$dep ] && { LIB=$DEBROOT$lib/$dep; break; }
+    LIB=$(find $DEBROOT$lib | grep -I $dep | head -n1)
+    [ -n "$LIB" ] && break
+  done
+  if   [ -z "$LIB" ]
+  then [ "$dep" = "linux-vdso.so.1" ] || {
+    printf "[\e[31m$1:$dep\e[0m]"; }
+    return 1
+  elif [ -f $DESTDIR/lib/$(basename $LIB) ]; then printf '\e[33m=\e[0m'
+  else { printf '\e[32m[%s]\e[0m' $dep; cp $LIB $DESTDIR/lib/; }; fi; )
+  true; }
+
+__qemu_kvm(){ kvm -cpu host -smp 2 -no-reboot "$@"; }
+
+_run_kvm(){ # (: test kernel / squashfs-image :)
+  x='-nographic'
+  a='console=ttyS0'
+
+  # (: create storage :)
+  test -f $SOURCES/storage.img || {
+    echo creating storage...
+    truncate -s 1000M $SOURCES/storage.img
+    mkfs.ext4 $SOURCES/storage.img; }
+
+  echo booting...
+  [ ":$1:" = ":-x:" ] && { x=; a=; }
+
+  # -usb -device usb-host,hostbus=1,hostaddr=5 \
+  $DESTARCH_EMU $x \
+   -boot c \
+   -kernel $SOURCES/linux/$KERNEL_IMAGE \
+   -hda $SOURCES/gearos.img -hdb $SOURCES/storage.img \
+   -append "quiet rootwait root=/dev/sda init=/etc/rc $a"; }
+
+_splash_test(){
+  USPLASH=$HOME/.tmp/usplash
+  UGEAR=$BUILD/core/lib/u
+  BUSYBOX=$SOURCES/stage/bin/busybox
+  bash -n $UGEAR/splash || return 1
+  . $UGEAR/gear
+  _usplash init
+  _usplash menu set          aa_test1 "Test Action #1"
+  _usplash menu set --action aa_test1 "_usplash menu set aa_test1 'Test Action #1: [OK]'"
+  _usplash menu item    aa_test2      "Test Action #2/1:" "_usplash menu set aa_test2 --remove"
+  _usplash menu context aa_test2 alt1 "Test Action #2/2:" "_usplash menu set aa_test2 2"
+  _usplash menu context aa_test2 alt2 "Test Action #2/3:" "_usplash menu set aa_test2 3"
+  _usplash menu "1 2 3"
+  _usplash fini; }
+
+_splash(){
+  USPLASH=$HOME/.tmp/usplash
+  UGEAR=$BUILD/core/lib/u
+  . $UGEAR/gear
+  _usplash $@; }
+
+_select_device(){
+  _lsblk(){ lsblk -pl | awk '
+    BEGIN{getline;df="df"
+      while( ( df | getline ) > 0 ){
+        mounted[$1] = 1 }
+        close(df)}
+    (!mounted[$1]){printf "%4s %6s %s\n", $6, $4, $1}'; }
+    _splash select DEVICE 'Select Target' "$(_lsblk)"
+  export DEVICE=$(echo $DEVICE | awk '{print $3}');
+  DEVICE=
+  [ -w "$DEVICE" ] || { DEVICE=; return 1; }; 
+  _splash yesno NULL "Really erase [$DEVICE]" || {
+    DEVICE=; return 1; }; }

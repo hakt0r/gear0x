@@ -1,0 +1,44 @@
+#!/bin/sh
+# gearos linux kernel buildscript
+
+setup_default(){ _git_source linux https://github.com/torvalds/linux; }
+
+deps_default(){ _is_app bc || apt-get install bc build-essential; }
+
+config_default(){
+  [ -f $SOURCES/linux/.config ] && return 0
+  cp $(_arch_file linux_config) $SOURCES/linux/.config
+  _make -C $SOURCES/linux xconfig; }
+
+kernel_default(){
+  [ -f arch/$(uname -m)/boot/bzImage ] && return 0
+  _make bzImage modules 2>&1 |
+  _dots "[\e[31mlinux-build\e[0m]" 25; }
+
+sysroot_default(){
+  [ -d $SYSROOT/usr/include ] && return 1
+  mkdir -p $SYSROOT
+  make -C $SOURCES/linux  headers_install INSTALL_HDR_PATH=$SYSROOT 2>&1 |
+  _dots "[\e[31mlinux-headers\e[0m]" 25; }
+
+install_default(){
+  _make -C $SOURCES/linux modules_install INSTALL_MOD_PATH=$DESTDIR 2>&1 |
+  _dots "[\e[31mlinux-modules\e[0m]" 25; }
+
+build(){
+  _arch_hook config &&
+  _arch_hook kernel &&
+  _arch_hook sysroot; }
+
+install(){
+  mkdir -p $DESTDIR/lib/modules
+  cp -r /lib/firmware $DESTDIR/lib/
+  _arch_hook install; }
+
+clean(){
+  rm -rf $SYSROOT
+  rm $SOURCES/linux/arch/x86/boot/bzImage; }
+
+_arch_include linux
+_arch_hook deps
+_arch_hook setup

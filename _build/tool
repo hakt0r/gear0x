@@ -1,0 +1,110 @@
+#!/bin/sh
+#
+#  Buildtools for GEAR0x/cazuza
+#
+#   (c) 2015 Sebastian Glaser <anx>
+#
+#   RELEASED UNDER THE TERMS OF THE GNU GPLv3
+#   see: README.md / LICENSE.md
+#
+
+_help(){ printf "
+ Buildtools for GEAR0xFFF/cazuza - (c) 2015 Sebastian Glaser <anx>
+ RELEASED UNDER THE TERMS OF THE GNU GPLv3 / see $0 -license
+
+ USAGE: tool [OPTS] CMD [ARG] [...]
+   -h               show help
+   -license         show license info
+   -lib             use when sourceing _build/tool (see example)
+   -a DESTARCH      set $DESTARCH (x86_64|armpi2)
+   -e CODE          eval shell script in CODE (after  _arch_init)
+   -E CODE          eval shell script in CODE (before _arch_init)
+   -d CODE          execute CODE in $DEBROOT (chroot, emulation if necessary)
+   -s CODE          execute CODE in $DESTDIR (chroot, emulation if necessary)
+   -r [ OPTS ... ]  test KERNEL and IMAGE in qemu
+   -D DEVICE        set $DEVICE
+   -S               select $DEVICE from list
+
+  Rebuild GEAR0x
+    $ $0 rebuild installer debug
+
+  Update $DEBROOT with apt-get:
+    $ $0 -d 'apt-get update'
+
+  Using as lib:
+    1 #!/bin/sh
+    2 . ./_build/tool -lib
+    3 _tool -S rebuild 
+
+"; }
+
+_version(){ 
+  export RELEASE=$(cat $BUILD/release 2>/dev/null || printf experiment)
+  export VERSION=$(cat $BUILD/version 2>/dev/null || printf 0xDEADBEEF); }
+
+_rebuild(){
+  PKGS="core $DESTARCH_PKGS $@"
+  busybox sh $BUILD/tool build   $PKGS
+  busybox sh $BUILD/tool install $PKGS
+  busybox sh $BUILD/tool image   $PKGS
+  __image_$DESTARCH; }
+
+_build(){
+  export BWD=$PWD BUILD=$PWD/_build HOSTARCH=$(uname -m)
+  export BUSYBOX=$BWD/$HOSTARCH/stage/bin/busybox
+  export SOURCES= DESTDIR= DEBROOT= SYSROOT= DEVICE= DESTARCH= DESTARCH_EMU=
+  local _loop_ # used while reading switches
+  _version     # read current $VERSION and $RELEASE
+  # require busybox
+  [ -x $BUSYBOX ] || BUSYBOX=$(which busybox 2>&1)
+  [ -x $BUSYBOX ] || { echo ERROR: please provide BUSYBOX; return 1 ; }
+  # [ -n "$IS_BB" ] || { IS_BB=true $BUSYBOX sh "$0" "$@";   return $?; }
+  # source _build/lib
+  . $BUILD/lib
+  # read early options
+  _loop_=true; while $_loop_; do case "$1" in
+    "-S") _select_device;     shift   ;;
+    "-D") DEVICE="$2";        shift 2 ;;
+    "-a") DESTARCH=$2;        shift 2 ;;
+    "-h") _help;             return 0 ;;
+    "-E") shift; eval "$@"; return $? ;;
+    *   ) _loop_=false;;
+  esac; done
+  # determine DESTARCH
+  [ -f _config ] && . _config
+  [ -z $DESTARCH ] && DESTARCH=$(uname -m)
+  [ -z $DESTARCH ] && { echo COULD NOT DETERMINE DESTARCH; return 1; }
+  _arch_include
+  # set DESTARCH-dependent variables
+  SOURCES=$BWD/$DESTARCH
+  DESTDIR=$SOURCES/stage
+  DEBROOT=$SOURCES/debian
+  SYSROOT=$SOURCES/sysroot
+  # create $SOURCES (and dirs needed)
+  mkdir -p $SOURCES $SYSROOT
+  # activate cross compiler (if needed)
+  if [ "$HOSTARCH" != "$DESTARCH" ]
+  then __crossinit
+  else DESTARCH_EMU=__qemu_kvm; fi
+  # setup debian chroot for $DESTARCH (unless exists)
+  [ -d $DEBROOT ] || __debroot
+  # read late options
+  _loop_=true; while $_loop_; do case "$1" in
+    "-lib")                            return 0;;
+    "-e") shift; eval "$@";            return $?;;
+    "-r") shift; _run_kvm "$@";        return $?;;
+    "-d") _exec_debroot "$2"; shift 2 ;return $?;;
+    "-b") _exec_build   "$2"; shift 2 ;return $?;;
+    "-D") DEVICE="$2";        shift 2 ;;
+    "-S") _select_device;     shift   ;;
+    *   ) _loop_=false;;
+  esac; done
+  # read and execute command   
+  case "$1" in
+    "stick")      __image_$DESTARCH;;
+    "splash")  shift; _splash  "$@";;
+    "test")           _splash_test ;;
+    "rebuild") shift; _rebuild "$@";;
+    *)                _require "$@";;
+  esac; }
+_build "$@" # HERE BE DRAGONS :>

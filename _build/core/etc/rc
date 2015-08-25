@@ -1,0 +1,13 @@
+#!/bin/sh
+exec 2>&1     # we only expect a duplex pipe
+. /lib/u/gear # source ugear library
+splash_fb     # then setup environment
+export LD_LIBRARY_PATH=/lib PATH=/bin
+export OZH=/etc/ozh TMP=/run TMPDIR=/run TERM=linux
+export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+export TERM=xterm-256color
+
+for lib in $(ls /etc/rc.d|sort) # run rc-scripts
+  do run_rc $lib
+done
+run_target console || sh        # or failover

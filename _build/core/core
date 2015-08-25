@@ -1,0 +1,50 @@
+#!/bin/sh
+depend @linux @busybox @net @crypto @usplash @install @dropbear
+
+build(){
+  printf "build:\e[32march\e[0m[$HOSTARCH:$DESTARCH]\n"
+  # (: reset build / copy skeleton :)
+  rm -f  $SOURCES/gearos.img
+  rm -rf $DESTDIR
+  mkdir -p $DESTDIR
+  cp -R $BUILD/core/skel/* $DESTDIR/; }
+
+install(){
+  printf "install:\e[32march\e[0m[$HOSTARCH:$DESTARCH]\n"
+  # (: tweak skeleton :)
+  echo /lib            > $DESTDIR/etc/ld.so.conf
+  ln -s /run/mtab        $DESTDIR/etc/mtab
+  head -n1 /etc/passwd > $DESTDIR/etc/passwd
+  head -n1 /etc/group  > $DESTDIR/etc/group;
+  [ -d $BWD/_local ] && cp -r $BWD/_local/* $DESTDIR/
+  true; }
+
+preimage(){
+  # (: here we count versions :D :)
+  _version_increment
+  echo $VERSION >$DESTDIR/etc/version
+  echo $RELEASE >$DESTDIR/etc/release
+  # (: setup /bin and /etc/rc :)
+  chmod a+x $DESTDIR/etc/rc
+  chmod a+x $DESTDIR/bin/*
+  # (: setup /lib (ldconfig) :)
+  # FIXME: ldconfig wont work for cross-compiling to armpi2
+  ldconfig.real -r $DESTDIR -f etc/ld.so.conf -c etc/ld.so.cache
+  # WORKAROUND: good old link-frenzy in /lib
+  ( cd $DESTDIR/lib
+    for lib in $(ls *.so.*)
+    do local p=
+      p=$(echo $lib | sed 's/.[0-9]\+.[0-9]\+.[0-9]\+$//'); [ -e "$p" ] || ln -s "$lib" "$p"
+      p=$(echo $lib | sed 's/.[0-9]\+.[0-9]\+$//');         [ -e "$p" ] || ln -s "$lib" "$p"
+      p=$(echo $lib | sed 's/.[0-9]\+$//');                 [ -e "$p" ] || ln -s "$lib" "$p"
+    done; )
+  # (: pack it up :)
+  __pack_$DESTARCH; }
+
+image(){
+  printf "image:\e[32march\e[0m[$HOSTARCH:$DESTARCH] $VERSION/$RELEASE\n"
+  # (: build squashfs-image :)
+  printf "[\e[32mbuild\e[0m] gearos.img "; (
+    cd $DESTDIR
+    mksquashfs ./ $SOURCES/gearos.img 2>&1 | awk '{printf "."}'
+  printf " [$(du -h $SOURCES/gearos.img|cut -f1)]";_done; ); }

@@ -1,0 +1,3 @@
+#!/bin/sh
+echo root:debug | chpasswd
+_usplash menu set ssh_info "login: root passwd: debug"

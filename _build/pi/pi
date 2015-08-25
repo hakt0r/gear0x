@@ -1,0 +1,57 @@
+#!/bin/sh
+
+build(){
+  _depend_apt_lib dbus
+  _depend_apt_lib samba-libs
+  _depend_apt_lib libsmbclient
+  _depend_apt_lib libssh-4
+  _depend_apt_lib libcec3
+  _depend_apt_lib libpcre3
+  _depend_apt_lib libfreetype6
+  _depend_apt_lib fonts-freefont-ttf
+  _depend_apt cec-client cec-utils;
+  if [ ! -d $SOURCES/libraspberrypi-armhf ]
+  then
+    mkdir        $SOURCES/libraspberrypi-armhf
+    ( wget -c -O $SOURCES/omxplayer.deb          http://omxplayer.sconde.net/builds/omxplayer_0.3.6~git20150710~4d8ffd1_armhf.deb
+      dpkg -x    $SOURCES/omxplayer.deb          $SOURCES/libraspberrypi-armhf; ) &
+    ( wget -c -O $SOURCES/libraspberrypi.deb     http://mirrors.mit.edu/raspbian/raspbian/pool/firmware/r/raspberrypi-firmware-nokernel/libraspberrypi0_1.20150212-1~nokernel1_armhf.deb
+      dpkg -x    $SOURCES/libraspberrypi.deb     $SOURCES/libraspberrypi-armhf; ) &
+    ( wget -c -O $SOURCES/libraspberrypi-bin.deb http://mirrors.mit.edu/raspbian/raspbian/pool/firmware/r/raspberrypi-firmware-nokernel/libraspberrypi-bin_1.20150212-1~nokernel1_armhf.deb
+      dpkg -x    $SOURCES/libraspberrypi-bin.deb $SOURCES/libraspberrypi-armhf; ) &
+    wait
+  fi; }
+
+install(){
+  # cp -rv $SOURCES/splash.mp4                             $DESTDIR/etc/
+  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/lib          $DESTDIR/
+  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/bin          $DESTDIR/
+  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/sbin/*       $DESTDIR/bin/
+  cp -rv $SOURCES/libraspberrypi-armhf/usr/bin/*           $DESTDIR/bin/
+  cp -rv $SOURCES/libraspberrypi-armhf/usr/lib/omxplayer/* $DESTDIR/lib/
+
+  cat $SOURCES/libraspberrypi-armhf/usr/bin/omxplayer | sed '
+    s|OMXPLAYER_LIBS="/opt/vc/lib"||
+    s|/tmp/|/run/|
+  ' >$DESTDIR/bin/omxplayer
+  
+  _steal_app dbus-daemon cec-client
+  
+  for lib in libcec \
+    libbsd.so libcli_smb_common.so libdcerpc-samba.so liberrors.so libgse.so            \
+    libk5crypto.so.3 libkeyutils.so.1 libkrb5.so.3 libkrb5support.so liblibcli_lsa3.so  \
+    liblibsmb.so libmsrpc3.so libndr-standard.so libndr.so libnsl.so.1 libnspr4.so      \
+    libplc4.so libplds4.so libsamba-security.so libsecrets3.so libsmbconf.so            \
+    libsmbregistry.so libtalloc.so.2 libtevent.so libutil_cmdline.so                    \
+    libCHARSET3 libaddns libasn1util libauthkrb5 libcli-nbt libcli_cldap libcliauth     \
+    libdbwrap libdcerpc-binding libgensec libgssapi.so.3 libinterfaces libkrb5.so.26    \
+    libkrb5samba liblber-2.4.so.2 libldap_r-2.4.so.2 libndr-nbt libndr-samba            \
+    libsamba-credentials libsamba-hostconfig libsamba-sockets libsamba3-util            \
+    libserver-role libsmb_transport libsmbd_shim libtdb-wrap libtdb.so.1 libtevent-util \
+    libutil_reg libutil_setid libutil_tdb libwbclient libasn1.so.8 libauth_sam_reply    \
+    libcli-ldap-common libhcrypto.so.4 libheimbase.so.1 libheimntlm libhx509.so.5       \
+    libldb.so.1 libldbsamba libndr-krb5pac libntdb.so.1 libroken.so.18 libsamba-modules \
+    libsamdb-common libsamdb libsasl2.so.2 libsqlite3 libutil_ntdb libwinbind-client    \
+    libwind libpcre libfreetype libpng12 libssh.so libgssapi_krb5 libsmbclient          \
+    libsamba-util libflag_mapping
+  do _steal_lib $lib; done; }

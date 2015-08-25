@@ -1,0 +1,14 @@
+#!/bin/sh
+
+build(){
+  _depend_apt ldd libc-bin
+  _depend_apt strace
+  _depend_apt bash; }
+
+install(){
+  rm -f $DESTDIR/bin/bash
+  rm -f $DESTDIR/bin/wget
+  _steal_app \
+    wget bash dash \
+    ldd ldconfig ldconfig.real \
+    strace; }

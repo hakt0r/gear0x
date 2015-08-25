@@ -1,0 +1,9 @@
+#!bin/sh
+__init(){
+  key=$(dropbearkey -t ecdsa -s 521 -f /etc/ecdsa_key 2>&1 | awk '/ingerprint/{gsub(/:/,"");print $3}')
+  mkdir -p /run/net/dropbear
+  dropbear -a -r /etc/ecdsa_key \
+    -E -P /run/net/dropbear/pid \
+    >/run/net/dropbear/log 2>&1
+  usplash menu set ssh $key; }
+__init &

@@ -1,0 +1,9 @@
+#!/bin/sh
+# gearos cryptsetup buildscript
+build(){
+  _depend_apt lsblk util-linux
+  _depend_apt dmsetup
+  _depend_apt pinentry pinentry-curses
+  _depend_apt cryptsetup; }
+install(){
+  _steal_app cryptsetup pinentry dmsetup lsblk; }

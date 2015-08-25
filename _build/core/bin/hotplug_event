@@ -1,0 +1,12 @@
+#!/bin/sh
+mkdir -p /run/hotplug/
+exec >>/run/hotplug/log 2>&1
+case "$SUBSYSTEM" in
+ pci) echo $SUBSYSTEM $ACTION $MODALIAS;;
+ usb) echo $SUBSYSTEM $ACTION $MODALIAS;;
+ net) echo $SUBSYSTEM $ACTION $MODALIAS;;
+ hid) echo $SUBSYSTEM $ACTION $MODALIAS;;
+wlan) echo $SUBSYSTEM $ACTION $MODALIAS;;
+# *) echo @@@@@@@@@@@@@@@ $(date +%s)
+#    echo args: $@; export;;
+esac

@@ -1,0 +1,50 @@
+#!/bin/sh
+
+[ -z $UGEAR ] && export UGEAR=/lib/u
+
+# alias debug_break='while { printf "[debug] ";read line; }; do eval "$line"; done; }'
+
+splash        (){ printf '\x1b[33m░▒▓█\x1b[1;44;32m up \x1b[43;30m %s s \x1b[0;33m█▓▒░\x1b[0m\n' $(awk '{print $1;exit}' /proc/uptime); }
+splash_fb     (){ /bin/fbsplash -s /etc/splash1080.ppm >/dev/null 2>&1 & }
+
+is_func       (){ type $1 2>&1 | grep -iq function; }
+
+run_rc        (){ local lib=$1; shift; [ -f "/etc/rc.d/$lib" ]     && . "/etc/rc.d/$lib"     "$@"; }
+run_target    (){ local lib=$1; shift; [ -f "/etc/target.d/$lib" ] && . "/etc/target.d/$lib" "$@"; }
+
+blk_uuids     (){ blkid $1 | awk '/UUID/{gsub(/[-UID="]+/,"");print $2}'; }
+blk_byuuid    (){ blkid | awk -vs="$1" '{gsub(/UUID=/,"");gsub(/[-":]/,"")}(s==$2){print $1}'; }
+blk_crypts    (){ blkid | awk '{gsub(/:/,"")}/[^ 0-9]+[0-9]+ .*crypto_LUKS/{print $1}'; }
+
+net_devs      (){ ifconfig -a   2>/dev/null | grep -o '^[a-z]\+[a-z0-9.:]\+'; }
+net_wifi_devs (){ iw dev | awk '/Interface/{print $2}' 2>/dev/null; }
+net_eth_devs  (){ ( ifconfig -a 2>/dev/null | grep encap:Ethernet | awk '{print $1}'; net_wifi_devs; ) | sort | uniq -u; }
+
+getchar       (){ eval $1="'$(dd bs=1 count=1 2>/dev/null)'"; }
+__getchar     (){ dd bs=1 count=1 2>/dev/null; }
+
+detect_tty_size(){
+  [ -z "$COLS" ] && export COLS=$(stty size 2>/dev/null|cut -d\  -f2)
+  [ -z "$ROWS" ] && export ROWS=$(stty size 2>/dev/null|cut -d\  -f1)
+  local i=0 s= t=$(stty -g 2>/dev/null)
+  printf "\e[31;41m\e[99999C\e[99999B"
+  stty raw 2>/dev/null || return 1
+  printf "\e[6n\e[0m"
+  while getchar c; do
+    [ "$i" -gt 20 ] && break
+    h=$(printf "$c" | hd | head -n1 | cut -c 11-12)
+    [ ":$h:" = ':1b:' -o ":$h:" = ':5b:' ] && continue
+    [ "$c" = "R" ]  && break || s="$s$c"
+    i=$(( $i + 1 ))
+  done
+  printf "\e[2K"
+  r=$(echo ";$s"|cut -d\; -f2)
+  c=$(echo ";$s"|cut -d\; -f3)
+  stty cooked  >/dev/null 2>&1
+  stty rows $r >/dev/null 2>&1
+  stty cols $c >/dev/null 2>&1
+  export ROWS=$r COLS=$c; }
+
+for lib in $(find $UGEAR -type f ! -name gear | grep -v awk)
+do . $lib 2>/dev/null
+done

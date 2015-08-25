@@ -1,0 +1,191 @@
+#!/bin/sh
+
+select_device(){
+  _usplash "select" "$3" "$2" "$(
+    lsblk "$1" | awk 'BEGIN{getline}{h[i++]=$1}END{for(o=0;o<i;o++)print h[o]}'
+  )\n/dev/null\n"; }
+
+select_options(){
+  _usplash choose "$2" "$1" '
+s  1 Encrypt /
+h  1 Separate /home
+hf 1 Format
+hc 1 Encrypt
+k  1 Use Masterkey
+kc 0 Create
+km 0 Mount from Device
+ks 0 Mount via SSH
+a  0 Advanced
+af 0 Format Disks
+ad 0 Install ADE Desktop
+'; }
+
+get_input(){
+  _usplash prompt "$2" "$1"; }
+
+get_pw(){
+  local pw1= pw2=
+  while [ -z "$pw1" -o ! "$pw1" = "$pw2" ]
+  do
+    _usplash passwd pw1 "Enter $1"   || return 1
+    _usplash passwd pw2 "Confirm $1" || return 1
+  done
+  export "$2"="$pw1"; }
+
+query_install(){
+  local DEVICE= OPTION= HOMEFS= HOMEFSPW= 
+  local ROOTFS= ROOTFSPW= MASTERKEY= MASTERKEYFS=
+  local ROOTPW= USERNAME= USERPW=
+
+  mkdir -p /run/install
+
+  _opt(){ echo $OPTION | grep -qI $1; }
+  _qky(){ _opt k && return 1 || _opt $1 && return 0; }
+
+  select_options "Choose your venom"              OPTION
+
+  while _opt af
+  do select_device -pl "Please select device"     DEVICE
+    fdisk $DEVICE
+    _usplash yesno NULL "Done formatting?" && break
+  done
+
+  if _opt k; then
+  select_device -pl "Please select Masterkey"     MASTERKEYFS
+  get_pw "Masterkey [$MASTERKEYFS]"               MASTERKEY
+  fi
+  select_device -pl "Please select /"             ROOTFS
+  _qky s && get_pw "password for [$ROOTFS]"       ROOTFSPW
+  if _opt h; then
+  select_device -pl "Please select /home"         HOMEFS
+  _qky hc && get_pw "password for [$HOMEFS]"      HOMEFSPW
+  fi
+
+  get_pw         "Enter a ROOT password"          ROOTPW
+  get_input      "Enter a USER name"              USERNAME
+  get_pw         "Enter a [$USERNAME]'s password" USERPW
+
+  _usplash yesno NULL "Begin installation?" || return 0
+
+  ( bootstrap_mounts && begin_install
+  ) >/run/install/log 2>&1 &
+
+  _usplash menu set zzz_install 'beginning installation'
+  return 0; }
+
+bootstrap_mounts(){
+  local create=$(_opt kc && echo true || echo false)
+  _status(){ echo $@; _usplash menu set zzz_install "$1"; }
+  # MASTERKEY
+  if _opt k;  then
+  if $create; then
+  _status "keyfs: create"; printf "%s" "$MASTERKEY" | cryptsetup -q luksFormat $MASTERKEYFS    || { _status "keyfs-error: create $MASTERKEYFS"; return 1; }
+  fi
+  _status "keyfs: verify"; cryptsetup isLuks $MASTERKEYFS                                      || { _status "keyfs-error: verify $MASTERKEYFS"; return 1; }
+  _status "keyfs: open";   printf "%s" "$MASTERKEY" | cryptsetup luksOpen $MASTERKEYFS gearkey || { _status "keyfs-error: onopen $MASTERKEYFS"; return 1; }
+  if $create; then
+  _status "keyfs: mkfs";  mkfs.ext4 /dev/mapper/gearkey                                        || return 1
+  fi
+  _status "keyfs: mkdir"; mkdir -p /boot/key01
+  _status "keyfs: mount"; mount /dev/mapper/gearkey /boot/key01                                || return 1 
+  # MASTERKEY: GEAR
+  if $create; then
+  _opt s  && ROOTFSPW="$(openssl rand 4096)"
+  _opt hc && HOMEFSPW="$(openssl rand 4096)"
+  mkdir /boot/key01/.gearos
+  echo boot/key > /boot/key01/.gearos/mount
+  fi;fi
+  # ROOTFS
+  if _opt s; then
+  _status '/ format';      printf "%s" "$ROOTFSPW" | cryptsetup luksFormat $ROOTFS         || return 1
+  _status '/ open';        printf "%s" "$ROOTFSPW" | cryptsetup luksOpen   $ROOTFS system  || return 1
+  _opt s && printf "%s" "$ROOTFSPW" >/boot/key01/$(blk_uuids $ROOTFS)
+  ROOTFS=/dev/mapper/system
+  fi
+  _status '/ mkfs';        mkfs.ext4 $ROOTFS                                               || return 1
+  _status '/ mkdir';       mkdir -p /system;
+  _status '/ mount';       mount $ROOTFS /system                                           || return 1
+  # ROOTFS: GEAR
+  ROOTFS=/system; mkdir -p $ROOTFS/.gearos
+  echo system             >$ROOTFS/.gearos/mount
+  echo debian:$version    >$ROOTFS/.gearos/release
+  # HOMEFS
+  if _opt h; then 
+  if _opt hc; then
+  if _opt hf; then
+  _status '/home: format'; printf "%s" "$HOMEFSPW" | cryptsetup luksFormat $HOMEFS         || return 1
+  fi
+  _status '/home: open';   printf "%s" "$HOMEFSPW" | cryptsetup luksOpen $HOMEFS home      || return 1
+  _opt k && printf "%s" "$HOMEFSPW" >/boot/key01/$(blk_uuids $HOMEFS)
+  HOMEFS=/dev/mapper/home
+  fi
+  if _opt hf; then
+  _status '/home: mkfs';   mkfs.ext4 $HOMEFS                                               || return 1
+  fi
+  _status '/home: mkdir';  mkdir -p /system/home;
+  _status '/home: mount';  mount $HOMEFS /system/home                                      || return 1
+  # HOMEFS: GEAR
+  HOMEFS=/system/home; mkdir $HOMEFS/.gearos
+  echo system/home          >$HOMEFS/.gearos/mount
+  fi; _status "ready to roll"; true; }
+
+begin_install(){
+  # beef up PATH from our little world of just having /bin
+  # having a working TMPDIR is crucial
+  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  export IFS=" "
+  ln -s /run /tmp
+  local version="$1" mirror="$2"
+  test -z "$ROOTFS"  && return 1
+  test -z "$version" && version=jessie
+  test -z "$mirror"  && mirror=http://ftp.de.debian.org/debian
+  _usplash menu set zzz_install "apt: bootstrapping"
+  /bin/bash /bin/debootstrap \
+    --verbose \
+    --no-check-gpg  \
+    --variant=minbase \
+    --arch=$(deb_arch) $version $ROOTFS $mirror 2>&1 |
+  while read line
+    do [ -n "$line" ] && {
+      echo "$line" >> /run/install/debootstrap.log
+      _usplash menu set zzzz_status "$line"; }
+  done || {
+    _usplash menu set zzzz_status
+    _usplash menu set zzz_install "debootstrap: failed"; return 1; }
+  _usplash menu set zzzz_status
+
+  # root & user
+  _usplash menu set zzz_install "user and password"
+  printf "root:$ROOTPW\n" | chroot $ROOTFS chpasswd
+                                 chroot $ROOTFS useradd -m -s "/bin/bash" $USERNAME
+  printf "$USERNAME:$USERPW\n" | chroot $ROOTFS chpasswd $USERNAME
+  # apt-get
+  _usplash menu set zzz_install "apt: init"
+  echo "\
+deb $mirror/ $version main contrib non-free
+deb $mirror/ $version-updates main contrib non-free
+# deb $mirror/ $version-backports main
+deb http://security.debian.org/ $version/updates main
+" > $ROOTFS/etc/apt/sources.list
+  echo 'Acquire::Languages "none";' > $ROOTFS/etc/apt/apt.conf.d/99translations
+  _usplash menu set zzz_install "apt: update"
+  chroot $ROOTFS apt-get update 2>&1 |
+  while read line
+    do [ -n "$line" ] && _usplash menu set zzzz_status "$line"
+  done; _usplash menu set zzzz_status
+  _usplash menu set zzz_install "debian: install"
+  chroot $ROOTFS apt-get install               \
+    -y --no-install-recommends                 \
+    consolekit whiptail dbus                   \
+    usb-utils pci-utils apt-utils              \
+    net-tools wireless-tools openssh-server    \
+    bzip2 unrar unlzma zip gzip                \
+    man tmux vim sudo wget curl pv htop        \
+    i3 slim xinit xserver-xorg-video-vesa 2>&1 |
+  while read line
+    do [ -n "$line" ] && _usplash menu set zzzz_status "$line"
+  done; _usplash menu set zzzz_status "debian: done"
+  _usplash menu item "aaa_boot" "boot installed system" "cryptomount_system"
+  _usplash menu set zzz_install "ready to boot"; }
+
+query_install
