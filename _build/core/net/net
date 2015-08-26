@@ -6,7 +6,8 @@ build(){
   _depend_apt iw
   _depend_apt iwconfig wireless-tools
   _depend_apt wpa_supplicant wpasupplicant
-  _depend_apt hostapd; }
+  _depend_apt hostapd; 
+  true; }
 
 install(){ # (: install networking :) - optimize take only what we need
   echo gear                     > $DESTDIR/etc/hostname
@@ -23,4 +24,5 @@ install(){ # (: install networking :) - optimize take only what we need
   _steal_app \
     brctl iw iwevent iwspy iwpriv iwgetid iwconfig iwlist  \
     wpa_action wpa_passphrase wpa_supplicant wpa_cli \
-    hostapd; }
+    hostapd;
+    true; }

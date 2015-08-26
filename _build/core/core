@@ -1,16 +1,16 @@
 #!/bin/sh
-depend @linux @busybox @net @crypto @usplash @install @dropbear
+depend @linux @busybox @net @crypto @dropbear
 
-build(){
-  printf "build:\e[32march\e[0m[$HOSTARCH:$DESTARCH]\n"
+prebuild(){
+  printf "[\e[32march\e[0m:$HOSTARCH:$DESTARCH]" >&2
   # (: reset build / copy skeleton :)
-  rm -f  $SOURCES/gearos.img
+  rm -rf $DESTDIR
   rm -rf $DESTDIR
   mkdir -p $DESTDIR
   cp -R $BUILD/core/skel/* $DESTDIR/; }
 
-install(){
-  printf "install:\e[32march\e[0m[$HOSTARCH:$DESTARCH]\n"
+postinstall(){
+  printf "[\e[32march\e[0m:$HOSTARCH:$DESTARCH]" >&2
   # (: tweak skeleton :)
   echo /lib            > $DESTDIR/etc/ld.so.conf
   ln -s /run/mtab        $DESTDIR/etc/mtab
@@ -41,10 +41,47 @@ preimage(){
   # (: pack it up :)
   __pack_$DESTARCH; }
 
+preramfs(){ local ramfs=$SOURCES/initramfs
+  rm -rf $ramfs $ramfs.gz
+  mkdir -p $ramfs/dev; }
+
+postramfs(){ local ramfs=$SOURCES/initramfs; ( 
+  #cd $DESTDIR
+  cd $ramfs; mkdir -p sys dev bin rootfs lib/modules
+  head -c100 $SOURCES/gearos.img | md5sum | awk '{print $1}' >gear_md5
+  echo '#!/bin/sh
+mount -t devtmpfs null /dev 2>/dev/null
+mount -t sysfs    null /sys 2>/dev/null
+sh
+sum=$(busybox cat gear_md5)
+dev=$(ls /sys/class/block | busybox grep -qI $sum )
+if [ -n "$dev" ]
+then
+  busybox modprobe squashfs                2>/dev/null
+  busybox mount $line /rootfs              2>/dev/null &&
+  exec busybox switch_root /rootfs /etc/rc 2>/dev/null
+  echo ERROR: mounting $line ($dsum) on /rootfs failed
+fi
+echo Could not find GEAR0x ROOTFS
+echo dropping to a shell; /bin/sh
+echo rebooting..........; reboot -f
+'>init; chmod a+x init
+  cp $SOURCES/busybox/busybox ./bin/
+  for t in echo test mount ln mkdir ash sh cat ls ; do ln bin/busybox bin/$t; done
+  for t in null tty zero console
+  do cp -a /dev/$t dev/$t; done
+  find . | cpio -H newc -o | gzip -9 -n >$ramfs.gz; )
+  sync
+  #kvm -nographic \
+  # -hda $SOURCES/gearos.img             \
+  # -kernel $SOURCES/linux/$KERNEL_IMAGE \
+  #-initrd $ramfs.gz                     \
+  # -append "root=/dev/ram0 rootfstype=tmpfs rw console=ttyS0"
+}
+
 image(){
-  printf "image:\e[32march\e[0m[$HOSTARCH:$DESTARCH] $VERSION/$RELEASE\n"
+  printf "\n[\e[32march\e[0m:$HOSTARCH:$DESTARCH]" >&2
   # (: build squashfs-image :)
-  printf "[\e[32mbuild\e[0m] gearos.img "; (
-    cd $DESTDIR
-    mksquashfs ./ $SOURCES/gearos.img 2>&1 | awk '{printf "."}'
-  printf " [$(du -h $SOURCES/gearos.img|cut -f1)]";_done; ); }
+  rm -f  $SOURCES/gearos.img
+  ( cd $DESTDIR; mksquashfs ./ $SOURCES/gearos.img -all-root -no-progress -info -comp xz; )
+  printf "\n\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/gearos.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/gearos.img|cut -f1) >&2; }

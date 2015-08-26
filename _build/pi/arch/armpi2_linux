@@ -7,22 +7,18 @@ setup_armpi2(){
 
 kernel_armpi2(){
   [ -f $SOURCES/linux/$KERNEL_IMAGE ] && return 0
-  _make -C $SOURCES/linux zImage modules dtbs 2>&1 |
-  _dots "[\e[31mlinux\e[0m]" 25; }
+  _make -C $SOURCES/linux zImage modules dtbs; }
 
 sysroot_armpi2(){
-  [ -d $SYSROOT/usr/include ] && return 1
+  [ -d $SYSROOT/usr/include ] && return 0
   local r=$(realpath $(arm-linux-gnueabihf-gcc -print-sysroot))
   mkdir -p $SYSROOT/usr
-  cp -vr $r/* $SYSROOT/ 2>&1 |
-  _dots 'install-sysroot' 2
-  _make -C $SOURCES/linux INSTALL_HDR_PATH=$SYSROOT/usr headers_install 2>&1 |
-  _dots "[\e[31mlinux\e[0m]" 25; }
+  cp -vr $r/* $SYSROOT/
+  _make -C $SOURCES/linux INSTALL_HDR_PATH=$SYSROOT/usr headers_install; }
 
 install_armpi2(){
   local DEST=$SOURCES/bootfs FW=$SOURCES/firmware
-  _make -C $SOURCES/linux INSTALL_MOD_PATH=$DESTDIR modules_install 2>&1 |
-  _dots "[\e[31mlinux-modules\e[0m]" 25
+  _make -C $SOURCES/linux INSTALL_MOD_PATH=$DESTDIR modules_install;
   ( cd $SOURCES/linux
     rm -rf $DEST; mkdir -p $DEST/overlays
     cp -r $FW/boot/* arch/arm/boot/dts/*.dtb $DEST/

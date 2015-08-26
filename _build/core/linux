@@ -11,19 +11,16 @@ config_default(){
   _make -C $SOURCES/linux xconfig; }
 
 kernel_default(){
-  [ -f arch/$(uname -m)/boot/bzImage ] && return 0
-  _make bzImage modules 2>&1 |
-  _dots "[\e[31mlinux-build\e[0m]" 25; }
+  [ -f $SOURCES/linux/$KERNEL_IMAGE ] && return 0
+  _make -C $SOURCES/linux bzImage modules; }
 
 sysroot_default(){
-  [ -d $SYSROOT/usr/include ] && return 1
+  [ -d $SYSROOT/usr/include ] && return 0
   mkdir -p $SYSROOT
-  make -C $SOURCES/linux  headers_install INSTALL_HDR_PATH=$SYSROOT 2>&1 |
-  _dots "[\e[31mlinux-headers\e[0m]" 25; }
+  _make -C $SOURCES/linux headers_install INSTALL_HDR_PATH=$SYSROOT; }
 
 install_default(){
-  _make -C $SOURCES/linux modules_install INSTALL_MOD_PATH=$DESTDIR 2>&1 |
-  _dots "[\e[31mlinux-modules\e[0m]" 25; }
+  _make -C $SOURCES/linux modules_install INSTALL_MOD_PATH=$DESTDIR; }
 
 build(){
   _arch_hook config &&
@@ -37,7 +34,7 @@ install(){
 
 clean(){
   rm -rf $SYSROOT
-  rm $SOURCES/linux/arch/x86/boot/bzImage; }
+  rm $SOURCES/linux/$KERNEL_IMAGE; }
 
 _arch_include linux
 _arch_hook deps

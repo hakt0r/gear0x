@@ -1,0 +1,28 @@
+#!/bin/sh
+add_to_path(){
+  local p=$(readlink -f "$1")
+  [ -d "$p" ] || return 1
+  echo $PATH | IFS=: grep -qI "$p" ||
+  export PATH=$p:$PATH; }
+tool_env(){
+  add_to_path "$BWD/_build" ||
+  add_to_path "$PWD/_build" || { 
+  printf \
+  '\e[1;41m ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR \e[0m
+
+    >> \e[1;41m Could not find \e[44m _build \e[0m <<
+    
+    To fix this:
+
+    a. cd to --
+    b. or set the \e[1;44m $BWD \e[0m environment variable to --
+
+    -- the directory \e[1mcontaining\e[0m the _build directory.
+
+  \e[1;41m ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR @ ERROR \e[0m
+  ' >&2; return 1; }
+  local result=$?
+  unset tool_env
+  unset add_to_path
+return $result; }
+tool_env
