@@ -27,34 +27,7 @@ _arch_include(){
   local f=$(find -L $BUILD -type f -name "$DESTARCH$t")
   [ -f "$f" ] && . "$f"; }
 
-__crossinit_default(){
-  _make(){ make -j2 "$@"; }; }
-
-_mount_devs(){ test -z "$1" && return 1
-  for d in proc sys dev; do
-    sudo umount $1/$d
-    sudo mount  -o bind /$d $1/$d
-  done; }
-
-_ccache(){
-  export PATH=/usr/lib/ccache:$PATH
-  export CC="ccache gcc"
-  export CXX="ccache g++"; }
-
-_generic_build(){ ( _ccache
-  test -z "$SYSROOT" && SYSROOT=/
-  test -d $1 || git clone $2 $1
-  echo building: $1 from: $2
-  cd $1
-  test -f Makefile || {
-    c=./configure; test -f $c ||
-    c=./autogen.sh
-    $c \
-      --with-sysroot=$SYSROOT \
-      --prefix=$DESTDIR \
-      --libdir=$DESTDIR/lib \
-      --sysconfdir=$DESTDIR/etc; }
-  _make install; ); }
+crossinit_default(){ :; }
 
 __exec_default(){
   PATH=/bin:/sbin:/usr/bin:/usr/sbin chroot $1 /bin/sh -c "$2"; }
@@ -90,6 +63,21 @@ _run_kvm(){ # (: test kernel / ramdisk / squashfs-image :)
 
 # debian related
 
+_deburl(){
+  local URL="$1"; shift
+  awk -vURL="$URL" -va="$*" '
+BEGIN{ wget = "wget -O- " URL " 2>/dev/null"
+  while( (wget|getline) > 0){
+    if( 0 == index($0,"deb") ) continue
+    gsub(/.*a href="/,""); gsub(/".*/,"")
+    split(a,h," "); l = 1 + length(h); c = 1
+    for(i=1;i<l;i++) if( 0 == index($0,h[i]) ) c = 0
+    if(c) {
+      if ( 1 == index($0,"http") ) print $0
+      else print URL $0
+ close(wget);exit(0)}
+}close(wget);exit(1)}'; }
+
 _depend_deb(){
   if [ -z "$2" ]
   then local url="$1" name=$(basename "$1")
@@ -100,15 +88,14 @@ _depend_deb(){
     echo DOWNLOADING $name
     $(which wget) -O- "$url" | dpkg-deb -x /dev/stdin $SOURCES/$name; }; }
 
-
 _debroot(){
-  _arch_hook __debroot # else setup $DEBRROT ($DESTARCH debian chroot)
+  _arch_hook debroot # else setup $DEBRROT ($DESTARCH debian chroot)
   [ -d $DEBIAN ] && return 0
   SCRIPT=testing
   qemu-debootstrap --variant=minbase --no-check-gpg --arch=$DESTARCH_DEBIAN $SCRIPT $DEBIAN $DEBIAN_REPO
   echo 'Acquire::Languages "none";' > $DEBIAN/etc/apt/apt.conf.d/99translations
   _exec_debroot "apt-get update"; }
-__debroot_default(){ :; }
+debroot_default(){ :; }
 
 _depend_apt_host(){
   local bin=$1 lib=$2

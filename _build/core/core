@@ -69,7 +69,7 @@ preimage(){
       p=$(echo $lib | sed 's/.[0-9]\+$//');                 [ -e "$p" ] || ln -s "$lib" "$p"
     done; )
   # (: pack it up :)
-  __pack_$DESTARCH; }
+  pack_$DESTARCH; }
 
 image(){
   # (: build squashfs-image :)
@@ -82,4 +82,4 @@ image(){
 
 tests(){ _run_kvm -x; }
 
-poststick(){ __stick_$DESTARCH; }
+poststick(){ stick_$DESTARCH; }

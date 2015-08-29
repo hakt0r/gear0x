@@ -1,15 +1,11 @@
 #!/bin/sh
 # gearos linux kernel buildscript
 
-build(){
-  _arch_hook config &&
-  _arch_hook kernel &&
-  _arch_hook sysroot; }
-
 install(){
+  [ -d $DESTDIR/lib/modules -a -d $DESTDIR/lib/firmware ] && return 0
   mkdir -p $DESTDIR/lib/modules
   cp -r /lib/firmware $DESTDIR/lib/
-  _arch_hook install; }
+  _arch_hook linux_install; }
 
 ramfs(){
   [ $KERNEL_FORMAT = blob ] || return 0
@@ -18,41 +14,17 @@ ramfs(){
     -name squashfs.ko -or \
     -name dm-crypt.ko) $RAMFS/; }
 
-clean(){
-  rm -rf $SYSROOT
-  rm $KERNEL_IMAGE; }
-
 # this is somewhat hooked :)
-
-setup_default(){
-  _git_source linux https://github.com/torvalds/linux; }
-
-config_default(){
-  [ -f $SOURCES/linux/.config ] && return 0
-  cp $(_arch_file linux_config) $SOURCES/linux/.config
-  _make -C $SOURCES/linux xconfig; }
-
-kernel_default(){
-  [ -f $KERNEL_IMAGE ] && return 0
-  _make -C $SOURCES/linux bzImage modules; }
-
-sysroot_default(){
-  [ -d $SYSROOT/usr/include ] && return 0
-  mkdir -p $SYSROOT
-  _make -C $SOURCES/linux headers_install INSTALL_HDR_PATH=$SYSROOT; }
-
-install_default(){
-  [ -d $DESTDIR/lib/modules ] && return 0
-  _make -C $SOURCES/linux modules_install INSTALL_MOD_PATH=$DESTDIR; }
-
-deps_default(){ :; }
+install_default() { :; }
+setup_default()   { :; }
+deps_default()    { :; }
 
 _arch_include linux
 
 _is_app bc || apt-get install bc build-essential
 
-_arch_hook deps
-_arch_hook setup
+_arch_hook linux_deps
+_arch_hook linux_setup
 
 [ -n "$KERNEL_FORMAT" ] || KERNEL_FORMAT=bzImage
 [ -n "$KERNEL_IMAGE"  ] || KERNEL_IMAGE=$SOURCES/linux/arch/$DESTARCH_COMMON/boot/$KERNEL_FORMAT

@@ -106,7 +106,7 @@ _require(){
     __load "$target" "$mod" || return 1
   done; }
 
-_rebuild(){
+_make(){
   [ -z "$PHASES" ] && local PHASES="build install image ramfs stick"
   local n phase PKGS="core $DESTARCH_PKGS $@"
   for phase in $PHASES
@@ -147,7 +147,7 @@ _tool(){ local _loop_
   DEBIAN=$SOURCES/debian
   SYSROOT=$SOURCES/sysroot
   mkdir -p $SOURCES $SYSROOT       # create $SOURCES (and dirs needed)
-  _arch_hook __crossinit           # activate cross compiler (if needed)
+  _arch_hook crossinit           # activate cross compiler (if needed)
   _debroot                         # check for debroot
   _loop_=true; while $_loop_       # read late options
   do case "$1" in
@@ -162,10 +162,10 @@ _tool(){ local _loop_
     *   ) _loop_=false;;
   esac; done
   case "$1" in                     # read and execute command   
-    "stick")      __stick_$DESTARCH;;
+    "stick")      stick_$DESTARCH;;
     "splash")  shift; _splash  "$@";;
     "test")           _splash_test ;;
-    "rebuild") shift; _rebuild "$@";;
+    "make")    shift; _make    "$@";;
     *)                _require "$@";;
   esac; }
 _tool "$@" # HERE BE DRAGONS :>
