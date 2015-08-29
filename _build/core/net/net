@@ -16,10 +16,9 @@ install(){ # (: install networking :) - optimize take only what we need
   echo order hosts,bind         > $DESTDIR/etc/host.conf
   echo hosts: files dns         > $DESTDIR/etc/nsswitch.conf
 
-  printf '[\e[31mnetlibs\e[0m] '
   for l in libnss_files.so libnss_dns.so libnss3.so libnss_compat.so libnssutil3.so libresolv.so
-   do _steal_lib $l; done
-  _done
+  do _steal_lib $l; done
+
   rm -f $DESTDIR/bin/brctl
   _steal_app \
     brctl iw iwevent iwspy iwpriv iwgetid iwconfig iwlist  \

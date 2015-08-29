@@ -8,12 +8,15 @@ build(){
   _depend_apt tmux
   _depend_apt tic ncurses-bin
   [ -f $BB_SOURCES/busybox ] && return 0
-  [ ! -f -C $BB_SOURCES/.config ] && {  
-    cp $(_arch_file linux_config) $BB_SOURCES/.config
+  [ -f $BB_SOURCES/.config ] || {
+    cat $(_arch_file busybox_config) |
+    sed 's|CONFIG_SYSROOT=""|CONFIG_SYSROOT="'$SYSROOT'"|' \
+    > $BB_SOURCES/.config
     _make -C $BB_SOURCES menuconfig; }
-  _make -C $BB_SOURCES clean
-  _make -C $BB_SOURCES menuconfig
   _make -C $BB_SOURCES; }
+
+reconfigure(){
+  _make -C $BB_SOURCES menuconfig clean; }
 
 install(){
   # copy terminfo
@@ -23,12 +26,12 @@ install(){
   _steal_app tmux
   # install busybox
   cp $BB_SOURCES/busybox $DESTDIR/bin/
-  [ -d $DEBROOT ] && cp $BB_SOURCES/busybox $DEBROOT/bin/
+  [ -d $DEBIAN ] && cp $BB_SOURCES/busybox $DEBIAN/bin/
   _exec_debroot "/bin/busybox --list-full | sed 's/.*\\///'" 2>&1 |
   while read item
-    do [ -z "$item" ] && continue; printf "[\e[33m$item\e[0m]"
+    do [ -z "$item" ] && continue; printf ",\e[33m$item\e[0m"
     ln -f "$DESTDIR/bin/busybox" "$DESTDIR/bin/$item" || exit 1
-  done; _done
+  done
   # replace switch-root
   for f in switch_root; do rm -f $DESTDIR/bin/$f;done
   _steal_app switch_root

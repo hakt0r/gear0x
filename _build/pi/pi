@@ -10,33 +10,21 @@ build(){
   _depend_apt_lib libfreetype6
   _depend_apt_lib fonts-freefont-ttf
   _depend_apt cec-client cec-utils;
-  if [ ! -d $SOURCES/libraspberrypi-armhf ]
-  then
-    mkdir        $SOURCES/libraspberrypi-armhf
-    ( wget -c -O $SOURCES/omxplayer.deb          http://omxplayer.sconde.net/builds/omxplayer_0.3.6~git20150710~4d8ffd1_armhf.deb
-      dpkg -x    $SOURCES/omxplayer.deb          $SOURCES/libraspberrypi-armhf; ) &
-    ( wget -c -O $SOURCES/libraspberrypi.deb     http://mirrors.mit.edu/raspbian/raspbian/pool/firmware/r/raspberrypi-firmware-nokernel/libraspberrypi0_1.20150212-1~nokernel1_armhf.deb
-      dpkg -x    $SOURCES/libraspberrypi.deb     $SOURCES/libraspberrypi-armhf; ) &
-    ( wget -c -O $SOURCES/libraspberrypi-bin.deb http://mirrors.mit.edu/raspbian/raspbian/pool/firmware/r/raspberrypi-firmware-nokernel/libraspberrypi-bin_1.20150212-1~nokernel1_armhf.deb
-      dpkg -x    $SOURCES/libraspberrypi-bin.deb $SOURCES/libraspberrypi-armhf; ) &
-    wait
-  fi; }
+  _depend_deb omxplayer http://omxplayer.sconde.net/builds/omxplayer_0.3.6~git20150710~4d8ffd1_armhf.deb; }
 
 install(){
+  _steal_app dbus-daemon cec-client
   # cp -rv $SOURCES/splash.mp4                             $DESTDIR/etc/
-  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/lib          $DESTDIR/
-  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/bin          $DESTDIR/
-  cp -rv $SOURCES/libraspberrypi-armhf/opt/vc/sbin/*       $DESTDIR/bin/
-  cp -rv $SOURCES/libraspberrypi-armhf/usr/bin/*           $DESTDIR/bin/
-  cp -rv $SOURCES/libraspberrypi-armhf/usr/lib/omxplayer/* $DESTDIR/lib/
-
-  cat $SOURCES/libraspberrypi-armhf/usr/bin/omxplayer | sed '
+  cp -rv $USERLAND/vc/bin                       $DESTDIR/
+  cp -rv $USERLAND/vc/sbin/*                    $DESTDIR/bin/
+  cp -rv $USERLAND/vc/lib                       $DESTDIR/
+  cp -rv $SOURCES/omxplayer/usr/bin/*           $DESTDIR/bin/
+  cp -rv $SOURCES/omxplayer/usr/lib/omxplayer/* $DESTDIR/lib/
+  cat    $SOURCES/omxplayer/usr/bin/omxplayer | sed '
     s|OMXPLAYER_LIBS="/opt/vc/lib"||
     s|/tmp/|/run/|
   ' >$DESTDIR/bin/omxplayer
-  
-  _steal_app dbus-daemon cec-client
-  
+  # TODO: rather use endgame-libsnarfing than this shit  
   for lib in libcec \
     libbsd.so libcli_smb_common.so libdcerpc-samba.so liberrors.so libgse.so            \
     libk5crypto.so.3 libkeyutils.so.1 libkrb5.so.3 libkrb5support.so liblibcli_lsa3.so  \

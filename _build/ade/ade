@@ -17,4 +17,4 @@ install(){
    libattr.so.1 libpng12.so.0 libz.so.1 libm.so.6 libgcc_s.so.1
   do _steal_lib $l
   done
-  cp -R $DEBROOT/etc/X11 $DESTDIR/etc/; }
+  cp -R $DEBIAN/etc/X11 $DESTDIR/etc/; }

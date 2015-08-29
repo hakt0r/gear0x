@@ -1,0 +1,58 @@
+#!/bin/sh
+_basemounts(){
+  $B mount -t devtmpfs null   $1/dev     2>/dev/null
+  $B mount -t sysfs    null   $1/sys     2>/dev/null
+  $B mount -t proc     null   $1/proc    2>/dev/null
+  $B mount -t tmpfs   tmpfs   $1/run     2>/dev/null
+  # remount root if necessary
+  $B touch /test 2>/dev/null && $B rm /test ||
+  $B mount -o remount,rw /
+  $B mkdir -p                 $1/dev/pts
+  $B mount -t devpts   null   $1/dev/pts 2>/dev/null
+  # i hate /tmp but it's still hardcoded in some debian packages
+  $B ln -sf $1/run            $1/tmp
+  # i'm kinda used to these
+  $B ln -sf $1/proc/self/fd/0 $1/dev/stdin
+  $B ln -sf $1/proc/self/fd/1 $1/dev/stdout
+  $B ln -sf $1/proc/self/fd/2 $1/dev/stderr; }
+_load_fs_module(){
+  $B grep -q $1 /proc/filesystems || $B insmod /$1.ko; }
+_gear_init(){
+  export TERM=linux-color PATH=/bin HOME=/root LD_LIBRARY_PATH=/
+  local B=busybox dev d
+  _find_gear(){
+    dev=$($B awk -vSUM=$($B cat /gear_md5) '
+    BEGIN{ 
+      lst = "busybox ls /sys/class/block"
+      while ( ( lst | getline ) > 0 ) {
+        file = "/dev/" $1
+        cmd = "busybox head -c 100 " file " | busybox md5sum"
+        cmd | getline; close(cmd)
+        if ( SUM == $1 ) {
+          print file; exit(0) }
+      } exit(1); }' 2>/dev/null)
+    if [ -n "$dev" ]
+    then
+      $B mkdir /run/rootfs         &&
+      _load_fs_module squashfs     &&
+      _load_fs_module overlay      &&
+      $B mount $dev /run/rootfs    &&
+      _switch_to_gear
+      echo "ERROR: mounting $dev on /rootfs failed"
+    else echo Could not find GEAR0x ROOTFS; fi
+    echo BOOT FAILED:
+    echo installing more busybox; $B --install /bin
+    export PS1='\x1b[1;37;43m RESUCE \x1b[0m '
+    echo dropping to a shell; $B sh
+    echo rebooting..........; $B reboot -f; }
+  _switch_to_gear(){
+    $B mkdir /run/.work /run/.overlay /run/overlay
+    $B mount -t overlay -o lowerdir=/run/rootfs,upperdir=/run/.overlay,workdir=/run/.work overlay /run/overlay
+    for d in proc dev sys
+      do $B mount --move /$d /run/overlay/$d
+    done # run need special treatment
+    $B mount -o bind /run /run/overlay/run
+    exec $B switch_root -c $($B tty) /run/overlay /etc/rc; }
+  _basemounts
+  _find_gear; }
+_gear_init

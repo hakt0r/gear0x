@@ -1,0 +1,74 @@
+#!/bin/sh
+
+export FIRMWARE=$SOURCES/firmware
+export BINARY_KERNEL=stock
+
+deps_armpi(){
+  _git_source linux       https://github.com/raspberrypi/linux
+  _git_source linux-tools https://github.com/raspberrypi/tools
+  _git_source firmware    https://github.com/raspberrypi/firmware; }
+
+if [ -n "$BINARY_KERNEL" ]
+then
+
+setup_armpi(){
+  export USERLAND=$FIRMWARE/opt
+  export KERNEL_FORMAT=blob
+  export KERNEL=kernel
+  export KERNEL_IMAGE=$FIRMWARE/boot/$KERNEL.img
+  export KERNEL_VERSION=$(ls $FIRMWARE/modules | grep -v v7); }
+
+setup_armpi2(){
+  export USERLAND=$FIRMWARE/hardfp/opt
+  export KERNEL_FORMAT=blob
+  export KERNEL=kernel7
+  export KERNEL_IMAGE=$FIRMWARE/boot/$KERNEL.img
+  export KERNEL_VERSION=$(ls $FIRMWARE/modules | grep v7); }
+
+kernel_armpi(){ # TODO: install stock config for headers
+:; }
+
+install_armpi(){
+  local BOOTFS=$SOURCES/bootfs
+  local modules=$FIRMWARE/modules/$KERNEL_VERSION
+  rm -rf $BOOTFS
+  mkdir -p $BOOTFS/overlays $DESTDIR/lib/modules
+  cp -r $FIRMWARE/boot/* $BOOTFS/
+  cp $KERNEL_IMAGE $BOOTFS/$KERNEL.img; }
+
+else
+
+setup_armpi(){
+  export KERNEL_FORMAT=zImage; }
+
+kernel_armpi(){
+  [ -f $KERNEL_IMAGE ] && return 0
+  _make -C $SOURCES/linux zImage modules dtbs; }
+
+install_armpi(){
+  local DEST=$SOURCES/bootfs
+  _make -C $SOURCES/linux INSTALL_MOD_PATH=$DESTDIR modules_install;
+  ( cd $SOURCES/linux
+  rm -rf $DEST
+  mkdir -p $DEST/overlays
+  cp -r arch/arm/boot/dts/*.dtb \
+        $DEST/
+  cp -r arch/arm/boot/dts/overlays/*.dtb* \
+        arch/arm/boot/dts/overlays/README \
+        $DEST/overlays/
+  scripts/mkknlimg arch/arm/boot/zImage $DEST/$KERNEL.img
+  ); }
+
+fi
+
+sysroot_armpi(){
+  [ -d $SYSROOT/usr/include ] && return 0
+  local r=$(realpath $(arm-linux-gnueabihf-gcc -print-sysroot))
+  mkdir -p $SYSROOT/usr
+  cp -vr $r/* $SYSROOT/
+  _make -C $SOURCES/linux INSTALL_HDR_PATH=$SYSROOT/usr headers_install; }
+
+deps_armpi2    () { deps_armpi;    }
+kernel_armpi2  () { kernel_armpi;  }
+sysroot_armpi2 () { sysroot_armpi; }
+install_armpi2 () { install_armpi; }

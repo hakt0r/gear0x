@@ -26,8 +26,6 @@ install(){
 
   cp -r /usr/share/debootstrap $DESTDIR/lib/
 
-  printf '[\e[31mdebootstrap\e[0m] '
-
   __patch /usr/sbin/debootstrap            $DESTDIR/bin/debootstrap
   __patch /usr/share/debootstrap/functions $DESTDIR/lib/debootstrap/functions
 
