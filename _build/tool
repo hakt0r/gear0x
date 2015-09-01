@@ -127,6 +127,7 @@ _tool(){ local _loop_
   [ -x "$BUSYBOX" ] || BUSYBOX=$(which busybox 2>&1)
   [ -x "$BUSYBOX" ] || { echo ERROR: please provide BUSYBOX; return 1 ; }
   . $BUILD/lib                     # source _build/lib
+  . $BUILD/arch/common             # source _build/arch/common
   _loop_=true; while $_loop_       # read early options
   do case "$1" in
     "-S") _select_device;     shift   ;;

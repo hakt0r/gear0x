@@ -40,6 +40,8 @@ detect_tty_size(){
   printf "\e[2K"
   r=$(echo ";$s"|cut -d\; -f2)
   c=$(echo ";$s"|cut -d\; -f3)
+  [ -z "$r" -o 10 -gt "$r" ] && r=24
+  [ -z "$c" -o 50 -gt "$c" ] && c=80
   stty cooked  >/dev/null 2>&1
   stty rows $r >/dev/null 2>&1
   stty cols $c >/dev/null 2>&1

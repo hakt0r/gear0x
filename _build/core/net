@@ -12,9 +12,6 @@ build(){
 install(){ # (: install networking :) - optimize take only what we need
   echo gear                     > $DESTDIR/etc/hostname
   echo 127.0.0.1 localhost gear > $DESTDIR/etc/hosts
-  echo nameserver 8.8.8.8       > $DESTDIR/etc/resolv.conf
-  echo order hosts,bind         > $DESTDIR/etc/host.conf
-  echo hosts: files dns         > $DESTDIR/etc/nsswitch.conf
 
   for l in libnss_files.so libnss_dns.so libnss3.so libnss_compat.so libnssutil3.so libresolv.so
   do _steal_lib $l; done

@@ -3,16 +3,13 @@
 
 install(){
   [ -d $DESTDIR/lib/modules -a -d $DESTDIR/lib/firmware ] && return 0
-  mkdir -p $DESTDIR/lib/modules
-  cp -r /lib/firmware $DESTDIR/lib/
+  mkdir -p $DESTDIR/lib/modules                      &&
+  cp -r /lib/firmware $DESTDIR/lib/  && _ok firmware &&
   _arch_hook linux_install; }
 
 ramfs(){
   [ $KERNEL_FORMAT = blob ] || return 0
-  cp $(find $FIRMWARE/modules/$KERNEL_VERSION \
-    -name overlay.ko  -or \
-    -name squashfs.ko -or \
-    -name dm-crypt.ko) $RAMFS/; }
+  _steal_kmods $RAMFS *overlay.ko *squashfs.ko *virtio-input.ko; }
 
 # this is somewhat hooked :)
 install_default() { :; }

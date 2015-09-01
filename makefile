@@ -4,17 +4,17 @@ rebuild:
 		busybox sh _build/tool make installer debug
 
 rebuild-debug:
-		busybox sh _build/tool make installer debug
+		busybox sh _build/tool -v make installer debug
 
 
 ramfs:
-		busybox sh _build/tool -p ramfs,tests make
+		busybox sh _build/tool -p ramfs make
 
 stick:
 		busybox sh _build/tool stick
 
 test:
-		busybox sh _build/tool -p ramfs,tests make
+		busybox sh _build/tool -v -p tests make
 
 
 rebuild-stick:

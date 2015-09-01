@@ -16,7 +16,7 @@ _basemounts(){
   $B ln -sf $1/proc/self/fd/1 $1/dev/stdout
   $B ln -sf $1/proc/self/fd/2 $1/dev/stderr; }
 _load_fs_module(){
-  $B grep -q $1 /proc/filesystems || $B insmod /$1.ko; }
+  $B grep -q $1 /proc/filesystems || $B modprobe $1; }
 _gear_init(){
   export TERM=linux-color PATH=/bin HOME=/root LD_LIBRARY_PATH=/
   local B=busybox dev d

@@ -1,0 +1,22 @@
+#!/bin/sh
+
+export DESTARCH_COMMON=x86
+export DESTARCH_DEBIAN=i686
+export DESTARCH_MULTI=x86-linux-gnu
+
+linux_deps_x86(){
+  export KERNEL_DEBS="http://kernel.ubuntu.com/~kernel-ppa/mainline/daily/current/"
+  _depend_deb_from linux         "$KERNEL_DEBS" image   i386 generic
+  _depend_deb_from linux-headers "$KERNEL_DEBS" headers i386 generic; }
+
+linux_setup_x86(){
+  export KERNEL_FORMAT=blob
+  export KERNEL=$(ls $SOURCES/linux/boot|grep vmlinuz)
+  export KERNEL_IMAGE=$SOURCES/linux/boot/$KERNEL
+  export KERNEL_VERSION=$(ls $SOURCES/linux/lib/modules); }
+
+linux_install_x86(){
+  _steal_kmods $DESTDIR                                   \
+    $( lsmod | awk 'BEGIN{getline}{printf " *"$1".ko "}') \
+    modules.* *dm-crypt.ko *overlay.ko *squashfs.ko       \
+    *wireless* *vesa* *nouveau*;  }

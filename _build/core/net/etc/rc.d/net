@@ -1,9 +1,0 @@
-#!/bin/sh
-
-mkdir -p /run/net
-hostname $(cat /etc/hostname)
-ifconfig lo 127.0.0.1
-
-{ netdrivers; netplug; }           >/run/net.log 2>&1 &
-{ sleep 1; netdrivers; netplug; } >>/run/net/log 2>&1 &
-{ sleep 2; netdrivers; netplug; } >>/run/net/log 2>&1 &

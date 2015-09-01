@@ -1,0 +1,59 @@
+#!/bin/sh
+
+_arch_hook(){ local hook=$1; shift
+  if _exists ${hook}_$DESTARCH
+  then ${hook}_$DESTARCH "$@"
+  else ${hook}_default "$@";fi; }
+
+_arch_file(){
+  local t=; [ -n "$1" ] && t=_$1
+  find $(find $BUILD -type d -name arch) -type f -name "$DESTARCH$t"; }
+
+_arch_include(){
+  local t=; [ -n "$1" ] && t=_$1
+  local f=$(find -L $BUILD -type f -name "$DESTARCH$t")
+  [ -f "$f" ] && . "$f"; }
+
+__exec_default(){
+  PATH=/bin:/sbin:/usr/bin:/usr/sbin chroot $1 /bin/sh -c "$2"; }
+
+crossinit_default(){ :; }
+
+stick_default(){
+  [ -z "$DEVICE" ] && return 0
+  [ -w "$DEVICE" ] || return 1
+  [ -f $SOURCES/gearos.img ] || return 1
+  sBUFFER=35
+  sROOT=$((   $(du $DESTDIR|tail -n1|cut -f1) / 1024 ))
+  sKERNEL=$(( 20 + $(du $KERNEL_IMAGE|cut -f1) / 1024 ))
+  sSAFE=$((   $sROOT + $sKERNEL + $sBUFFER ))
+  o(){ while read line; do printf .;done; }
+  printf '[zero]'
+  dd if=/dev/zero of=$DEVICE bs=1M count=1 2>&1|o && _done || { _fail; return 1; }
+  sync
+  printf '[partion]'
+  printf "o\nn\np\n1\n2048\n+${sKERNEL}M\nn\np\n2\n\n+${sSAFE}M\nw\ny\n" |
+  fdisk $DEVICE                           2>&1|o && _done || { _fail; return 1; }
+  sync
+  printf "[install] $SOURCES/gearos.img "
+  pv $SOURCES/gearos.img               >"$DEVICE"2     && _done || { _fail; return 1; }
+  printf '[mkfs]';  mkfs.ext4 ${DEVICE}1        2>&1|o && _done || { _fail; return 1; }
+  printf '[mkdir]'; mkdir -p mnt                2>&1|o && _done || { _fail; return 1; }
+  printf '[mnt]';   mount ${DEVICE}1 mnt        2>&1|o && _done || { _fail; return 1; }
+  printf "[kernel]"
+  mkdir -p                             mnt/boot 2>&1|o && _done || { _fail; return 1; }
+  cp -v  $KERNEL_IMAGE  mnt/boot 2>&1|o && _done || { _fail; return 1; }
+  cp -rv /boot/grub                    mnt/boot 2>&1|o && _done || { _fail; return 1; }
+  cp -rv $BUILD/core/grub.cfg    mnt/boot/grub/ 2>&1|o && _done || { _fail; return 1; }
+  printf '[umount]'; umount mnt                 2>&1|o && _done || { _fail; return 1; }
+  sync
+  printf "[grub]"
+  mount ${DEVICE}1 mnt                                                               && printf "[mount]"
+  grub-install --force --no-floppy --boot-directory=$PWD/mnt/boot ${DEVICE} 1>&2 | o && printf "[install]"
+  umount mnt                                                                         && printf '[umount]' && _done
+  rm -rf mnt
+  sync
+  _arch_hook qemu            \
+   -boot c                   \
+   -hdb $SOURCES/storage.img \
+   -hda $DEVICE;             }

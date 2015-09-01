@@ -1,30 +1,25 @@
 #!/bin/sh
 
 build(){
-  _depend_apt busybox-static
+  [ -z "$(_arch_file busybox)" ] &&
+  _depend_apt busybox busybox-static
   _depend_apt tmux
   _depend_apt tic ncurses-bin; }
 
 install(){
-  # copy terminfo
-  _steal_app tic tmux
-  cp -r /lib/terminfo $DESTDIR/lib/
-  # copy tmux
-  _steal_app tmux busybox
+  local busybox=$(_arch_file busybox)
+  if [ -n "$busybox" ]
+  then cp $busybox $DESTDIR/bin/busybox
+  else _steal_app busybox
+  fi
   # install busybox
-  _exec_debroot "/bin/busybox --list-full | sed 's/.*\\///'" 2>&1 |
+  $DESTDIR/bin/busybox --list-full |
   while read item
-    do [ -z "$item" ] && continue; printf ",\e[33m$item\e[0m"
+    do item=$(basename $item)
+    [ -z "$item" ] && continue; printf ",\e[33m$item\e[0m" >&2
     ln -f "$DESTDIR/bin/busybox" "$DESTDIR/bin/$item" || exit 1
   done
-  # replace switch-root
-  for f in switch_root; do rm -f $DESTDIR/bin/$f;done
-  _steal_app switch_root
-  ozh; }
-
-ozh(){
-  mkdir -p $DESTDIR/etc/ozh/core
-  repo="https://raw.githubusercontent.com/hakt0r/ozh-core/master";
-  [ -f $SOURCES/ozh ] ||
-  $(which wget) "$repo/core" -O $SOURCES/ozh &&
-  cp $SOURCES/ozh $DESTDIR/etc/ozh/core/core; }
+  # copy terminfo
+  cp -r /lib/terminfo $DESTDIR/lib/
+  # copy tic, tmux
+  _steal_app tic tmux; }

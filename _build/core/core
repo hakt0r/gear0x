@@ -28,7 +28,7 @@ postramfs(){ ( cd $RAMFS
   head -c100 $SOURCES/gearos.img                    |
   md5sum | awk '{print $1}'     > ./gear_md5       &&
   cp -rv $BUILD/core/initramfs/*  ./               &&
-  cp -rv $SOURCES/busybox/busybox ./bin/           &&
+  cp -rv $DESTDIR/bin/busybox     ./bin/           &&
   chmod a+x                       ./etc/rc         &&
   bash -n                         ./etc/rc         &&
   bin/busybox --install ./bin                      &&
@@ -38,16 +38,6 @@ postramfs(){ ( cd $RAMFS
   ln -s /etc/rc ./init                             &&
   find . | cpio -H newc -o | gzip >$RAMFS.gz; )
   sync; }
-
-#   { cat - >$SOURCES/boot_test.c <<EOF
-# #include <stdio.h>
-# int main(int argc, char *argv[])
-# {
-#   printf("__hello_confusion__\n");
-#   sleep(999999999);
-# }
-# EOF
-#   _gcc --static $SOURCES/boot_test.c -o $RAMFS/init; } &&
 
 preimage(){
   # (: here we count versions :D :)
@@ -73,13 +63,11 @@ preimage(){
 
 image(){
   # (: build squashfs-image :)
+  printf "${_BPP}[\e[32mbuilding gearos\e[0m] " >&2
   rm -f  $SOURCES/gearos.img
-  ( cd $DESTDIR;
-    $VEROSE &&
-    mksquashfs ./ $SOURCES/gearos.img -all-root -comp xz -no-progress -info ||
-    mksquashfs ./ $SOURCES/gearos.img -all-root -comp xz; )
-  printf "\n\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/gearos.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/gearos.img|cut -f1) >&2; }
+  ( cd $DESTDIR; mksquashfs ./ $SOURCES/gearos.img -all-root -comp xz; )
+  printf "${_BPP}\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/gearos.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/gearos.img|cut -f1) >&2; }
 
 tests(){ _run_kvm -x; }
 
-poststick(){ stick_$DESTARCH; }
+poststick(){ _arch_hook stick; }
