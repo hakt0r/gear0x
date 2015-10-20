@@ -7,10 +7,6 @@ install(){
   cp -r /lib/firmware $DESTDIR/lib/  && _ok firmware &&
   _arch_hook linux_install; }
 
-ramfs(){
-  [ $KERNEL_FORMAT = blob ] || return 0
-  _steal_kmods $RAMFS *overlay.ko *squashfs.ko *virtio-input.ko; }
-
 # this is somewhat hooked :)
 install_default() { :; }
 setup_default()   { :; }

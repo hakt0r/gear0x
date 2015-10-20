@@ -1,1 +1,4 @@
-usplash menu item "zz_install" "install [gear]debian/gnu-linux"  "run_target install"
+#!/bin/sh
+usplash -i "zz_install" \
+        -t "install [gear]debian/gnu-linux" \
+        -a "sh /etc/target.d/install"

@@ -2,12 +2,12 @@
 
 _exists(){ type $1 2>&1 | grep -iq function; }
 _is_app(){ which $1 >/dev/null 2>&1; }
-_ok(){ printf "[\e[32m$@\e[0m]" >&2; } 
+_ok(){ printf "[\e[32m$@\e[0m]" >&2; }
 _done(){ printf ' [\e[32mdone\e[0m]\n'; }
-_no(){ printf "[\e[32m$@\e[0m]" >&2; } 
+_no(){ printf "[\e[32m$@\e[0m]" >&2; }
 _fail(){ printf ' [\e[31mfail\e[0m]\n'; }
 
-_version_increment(){ 
+_version_increment(){
   local v=$(printf "%d" $(cat $BUILD/version 2>/dev/null || printf 0))
   printf "0x%x" "$(( $v + 1 ))" >$BUILD/version
   _version; }
@@ -18,7 +18,7 @@ _git_source(){ local name="$1" url="$2"; shift 2
 # exec
 
 _exec_destdir(){ _arch_hook __exec "$DESTDIR" "$1"; }
-_exec_debroot(){ _arch_hook __exec "$DEBIAN" "$1"; }
+_exec_debroot(){ _arch_hook __exec "$DEBIAN"  "$1"; }
 
 # qemu
 
@@ -38,13 +38,21 @@ _run_kvm(){ # (: test kernel / ramdisk / squashfs-image :)
   echo booting...
   # -usb -device usb-host,hostbus=1,hostaddr=5 \
   _arch_hook __qemu $x       \
+   -m 512                    \
    -kernel $KERNEL_EMU       \
    -initrd $RAMFS.gz         \
    -hda $SOURCES/gearos.img  \
    -hdb $SOURCES/storage.img \
-   -append "root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a"; }
+   -append "quiet root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a"; }
 
 # debian related
+
+_debroot_compile(){
+  local src="$1" dst="$2" name=$(basename $1) dstname=$(basename $2)
+  [ -x $dst ] || {
+    cp $src $DEBIAN/tmp/
+    _exec_debroot "cd /tmp; diet gcc -static -o $dstname $name"
+    cp $DEBIAN/tmp/$dstname $dst; chmod a+x $dst; }; }
 
 _deburl(){
   local URL="$1"; shift
@@ -61,7 +69,7 @@ BEGIN{ wget = "wget -O- " URL " 2>/dev/null"
  close(wget);exit(0)}
 }close(wget);exit(1)}'; }
 
-_depend_http(){ 
+_depend_http(){
   [ -n "$2" ] &&
   { local url="$2" name="$1"; } ||
   { local url="$1" name=$(basename "$1"); }
@@ -88,7 +96,10 @@ _debroot(){
   SCRIPT=testing
   qemu-debootstrap --variant=minbase --no-check-gpg --arch=$DESTARCH_DEBIAN $SCRIPT $DEBIAN $DEBIAN_REPO
   echo 'Acquire::Languages "none";' > $DEBIAN/etc/apt/apt.conf.d/99translations
-  _exec_debroot "apt-get update"; }
+  _exec_debroot "apt-get update";
+  # _depend_apt tcc  build-essential
+  _depend_apt gcc  build-essential
+  _depend_apt diet dietlibc-dev; }
 debroot_default(){ :; }
 
 _depend_apt_host(){
@@ -108,17 +119,26 @@ _depend_apt(){
   bin=$(_exec_debroot "which $bin") 2>/dev/null
   [ -n "$bin" ] || _exec_debroot "apt-get install -y --no-install-recommends $lib"; }
 
-_steal_kmods(){ local dest="$1"; shift
-awk -vP=$SOURCES/linux -vK=lib/modules/$KERNEL_VERSION -vD=$dest -va="$*" '
-BEGIN{
-  find = "find " P "/" K " -type f"
-  split(a,h," "); l = 1 + length(h); c = 1
-  for(i=1;i<l;i++) { find = find o " -path " h[i]; o = " -or" }
-  while ( ( find | getline ) > 0 ){
-    gsub(/.*modules/,"lib/modules")
-    print "mkdir -p $(dirname " D "/" $0 ")"
-    print "cp " P "/" $0 " " D "/" $0 " 2>/dev/null" 
-  }}' | sh; }
+_steal_kmod(){  local dest="$1"; shift
+  local src="$SOURCES/linux" dir=
+  local mods="$src/lib/modules/$KERNEL_VERSION"
+  [ -f "$mods/modules.dep.bin" ] || {
+    printf "\e[1;43;30m depmod -b $src $KERNEL_VERSION \e[0m" >&2
+    $(which depmod) -b "$src"     $KERNEL_VERSION; }
+  [ -d $mods ] || { printf "\e[1;42;30m $mods \e[0m" >&2; return 1; }
+  $(which modprobe) -d "$src" -S "$KERNEL_VERSION" -D "$1" |
+    sed "/^builtin /d" |
+    sed "s|insmod $src||g" |
+  while read file
+  do dir="$dest/$(dirname $file)"
+     [ -d "$dir" ]        || mkdir -p      "$dir"
+     [ -f "$dest/$file" ] || cp $src/$file "$dir"
+  done; }
+
+_steal_kmods(){ local mod= dest="$1"; shift
+  for mod in "$@"
+  do _steal_kmod "$dest" "$mod"
+  done; }
 
 _steal_app(){ (
   for a in $@;do
@@ -131,7 +151,7 @@ _steal_app(){ (
 
 _steal_libs(){ (
   local app=$1
-  [ -f "$app" ] || app=$(_exec_debroot "which $app") 
+  [ -f "$app" ] || app=$(_exec_debroot "which $app")
   printf '\e[32m+\e[0m'
   for dep in $(_exec_debroot "ldd $app"|awk '{print $1}'); do
     _steal_lib $dep
@@ -154,30 +174,6 @@ _steal_lib(){ (
   else { printf '\e[32m[%s]\e[0m' $dep >&2; cp $LIB $DESTDIR/lib/; }; fi; )
   true; }
 
-_splash_test(){
-  USPLASH=$HOME/.tmp/usplash
-  UGEAR=$BUILD/core/lib/u
-  BUSYBOX=$SOURCES/busybox/busybox
-  [ -x $BUSYBOX ]       || return 1
-  bash -n $UGEAR/splash || return 1
-  . $UGEAR/gear
-  _usplash init
-  _usplash menu set          aa_test1 "Test Action #1"
-  _usplash menu set --action aa_test1 "_usplash menu set aa_test1 'Test Action #1: [OK]'"
-  _usplash menu item    aa_test2      "Test Action #2/1:" "_usplash menu set aa_test2 --remove"
-  _usplash menu context aa_test2 alt1 "Test Action #2/2:" "_usplash menu set aa_test2 2"
-  _usplash menu context aa_test2 alt2 "Test Action #2/3:" "_usplash menu set aa_test2 3"
-  _usplash menu "1 2 3"
-  _usplash fini; }
-
-_splash(){
-  USPLASH=$HOME/.tmp/usplash
-  UGEAR=$BUILD/core/lib/u
-  BUSYBOX=$SOURCES/busybox/busybox
-  [ -x $BUSYBOX ]       || return 1
-  . $UGEAR/gear
-  _usplash $@; }
-
 _select_device(){
   _lsblk(){ lsblk -pl | awk '
     BEGIN{getline;df="df"
@@ -188,6 +184,6 @@ _select_device(){
     _splash select DEVICE 'Select Target' "$(_lsblk)"
   export DEVICE=$(echo $DEVICE | awk '{print $3}');
   DEVICE=
-  [ -w "$DEVICE" ] || { DEVICE=; return 1; }; 
+  [ -w "$DEVICE" ] || { DEVICE=; return 1; };
   _splash yesno NULL "Really erase [$DEVICE]" || {
     DEVICE=; return 1; }; }

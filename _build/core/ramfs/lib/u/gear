@@ -1,0 +1,114 @@
+#!/bin/sh
+# alias debug_break='while { printf "[debug] ";read line; }; do eval "$line"; done; }'
+
+[ -z $UGEAR ] && export UGEAR=/lib/u
+
+isfnc(){ type $1 2>&1 | grep -iq function; }
+isapp(){ [ -x "$(which $1 >/dev/null 2>&1)" ]; }
+
+run_rc(){
+  local lib=$1 && shift 2>/dev/null &&
+  [ -f "/etc/rc.d/$lib" ] &&
+  . "/etc/rc.d/$lib" "$@"; }
+
+run_target(){
+  local lib=$1 && shift 2>/dev/null &&
+  if [ -f "/etc/target.d/$lib" ]
+  then
+    if [ $$ -ne 1 ]; then usplash -q "ugear run_target $@"; fi
+    . "/etc/target.d/$lib" "$@";
+  fi; }
+
+run_hook(){
+  local hook="$1"      &&
+  shift 2>/dev/null    &&
+  isfnc $hook          &&
+  { $hook "$@"; return $?
+  } || return 0; }
+
+blk_uuid      (){ blkid $1 | sed '/ UUID/!d;s/.* UUID=.//;s/".*//;s/-//g'; }
+blk_byuuid    (){ blkid | awk -vs="$1" '{gsub(/UUID=/,"");gsub(/[-":]/,"")}(s==$2){print $1}'; }
+
+net_devs      (){ ifconfig -a   2>/dev/null | grep -o '^[a-z]\+[a-z0-9.:]\+'; }
+net_wifi_devs (){ iw dev | awk '/Interface/{print $2}' 2>/dev/null; }
+net_eth_devs  (){ ( ifconfig -a 2>/dev/null | grep encap:Ethernet | awk '{print $1}'; net_wifi_devs; ) | sort | uniq -u; }
+
+getchar       (){ eval $1="'$(dd bs=1 count=1 2>/dev/null)'"; }
+__getchar     (){ dd bs=1 count=1 2>/dev/null; }
+
+detect_tty_size(){
+  [ -z "$COLS" ] && export COLS=$(stty size 2>/dev/null|cut -d\  -f2)
+  [ -z "$ROWS" ] && export ROWS=$(stty size 2>/dev/null|cut -d\  -f1)
+  local i=0 s= t=$(stty -g 2>/dev/null)
+  printf "\e[31;41m\e[99999C\e[99999B"
+  stty raw 2>/dev/null || return 1
+  printf "\e[6n\e[0m"
+  while getchar c; do
+    [ "$i" -gt 20 ] && break
+    h=$(printf "$c" | hd | head -n1 | cut -c 11-12)
+    [ ":$h:" = ':1b:' -o ":$h:" = ':5b:' ] && continue
+    [ "$c" = "R" ]  && break || s="$s$c"
+    i=$(( $i + 1 ))
+  done
+  printf "\e[2K"
+  r=$(echo ";$s"|cut -d\; -f2)
+  c=$(echo ";$s"|cut -d\; -f3)
+  [ -z "$r" -o 10 -gt "$r" ] && r=24
+  [ -z "$c" -o 50 -gt "$c" ] && c=80
+  stty cooked  >/dev/null 2>&1
+  stty rows $r >/dev/null 2>&1
+  stty cols $c >/dev/null 2>&1
+  export ROWS=$r COLS=$c; }
+
+respawn(){
+  local t=$(date +%s) r=0
+  while "$@"
+  do if [ $t -eq $(date +%s) ]
+  then r=$(( $r + 1 ))
+    if [ $r -gt 4 ]
+    then reset; clear
+      # FIXME usplash fini
+      echo "[$1] error: respawning too fast"
+      echo "[$1] dropping to /bin/bash"
+      exec /bin/bash -l
+      echo "[bash] failed, trying /bin/sh"
+      exec /bin/sh -l
+      echo "[sh] failed, rebooting..."
+      reboot -f
+    fi
+  else r=0; fi; t=$(date +%s); done; }
+
+hotplug(){ local d=
+  echo /bin/hotplug_event >/proc/sys/kernel/hotplug
+  # load drivers for devices that are already present
+  awk '
+  function addev(a){ if(!uniq[a]){ dev[++dc] = a; uniq[a] = 1 }}
+  function madev(m,o,i){
+    for(i=1;i<dc;i++){
+      if(0 < match(dev[i],m)){
+        system("modprobe " o " &")
+        dev[i] = "void"
+        break }}}
+  BEGIN{
+  SYS = "cat /sys/bus/*/devices/*/modalias"
+  while( 0 < (SYS|getline) ){
+    if(!index($0," ")){
+         if(0<match($0,/pci:/)){ o = o "\\(" substr($0,1,22) "\\)\\|" }
+    else if(0<match($0,/usb:/)){ o = o "\\(" substr($0,1,14) "\\)\\|" }
+    else { o = o "\\(" $0              "\\)\\|" }
+    addev($0) }
+  } close(SYS)
+  GREP = sprintf("grep -i \"%s\" /lib/modules/$(uname -r)/modules.alias",substr(o,1,length(o)-2))
+  while((GREP|getline)>0){
+    gsub(/\*/,".*",$2)
+    madev($2,$3)
+  } close(GREP) }' &
+  # fire hotplug event for devices that are already present
+  for d in $(ls /sys/class/block)
+  do ACTION=add SUBSYSTEM=block DEVICE=$d /bin/hotplug_event block & done
+  for d in $(ls /sys/class/net)
+  do ACTION=add SUBSYSTEM=net INTERFACE=$d /bin/hotplug_event net & done; }
+
+for lib in $(find $UGEAR -type f ! -name gear | grep -v awk)
+do . $lib 2>/dev/null
+done

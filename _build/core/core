@@ -1,43 +1,21 @@
 #!/bin/sh
 
-depend @linux @busybox @net @crypto @dropbear
-
-export RAMFS=$SOURCES/initramfs
+depend @linux @ramfs @net
 
 prebuild(){
   # (: reset build / copy skeleton :)
   rm -rf $DESTDIR
   rm -rf $DESTDIR
-  mkdir -p $DESTDIR
-  cp -R $BUILD/core/skel/* $DESTDIR/; }
+  mkdir -p $DESTDIR; }
 
 postinstall(){
   # (: tweak skeleton :)
+  echo $DESTARCH_MULTI > $DESTDIR/etc/arch
   echo /lib            > $DESTDIR/etc/ld.so.conf
-  ln -s /run/mtab        $DESTDIR/etc/mtab
   head -n1 /etc/passwd > $DESTDIR/etc/passwd
   head -n1 /etc/group  > $DESTDIR/etc/group;
   [ -d $BWD/_local ] && cp -r $BWD/_local/* $DESTDIR/
   true; }
-
-preramfs(){
-  rm -rf $RAMFS $RAMFS.gz
-  mkdir -p $RAMFS; }
-
-postramfs(){ ( cd $RAMFS
-  head -c100 $SOURCES/gearos.img                    |
-  md5sum | awk '{print $1}'     > ./gear_md5       &&
-  cp -rv $BUILD/core/initramfs/*  ./               &&
-  cp -rv $DESTDIR/bin/busybox     ./bin/           &&
-  chmod a+x                       ./etc/rc         &&
-  bash -n                         ./etc/rc         &&
-  bin/busybox --install ./bin                      &&
-  mknod -m 660 dev/console c 5 1                   &&
-  mknod -m 660 dev/loop0   b 7 0                   &&
-  mknod -m 660 dev/ram     b 1 0                   &&
-  ln -s /etc/rc ./init                             &&
-  find . | cpio -H newc -o | gzip >$RAMFS.gz; )
-  sync; }
 
 preimage(){
   # (: here we count versions :D :)

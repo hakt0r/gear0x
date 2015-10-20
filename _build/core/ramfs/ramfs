@@ -1,0 +1,32 @@
+#!/bin/sh
+depend @busybox @crypto @dropbear
+
+preramfs(){
+  [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/arch/src/usplash.c $SOURCES/usplash
+  rm -rf $RAMFS $RAMFS.gz
+  mkdir -p $RAMFS;
+  cp -rv $BUILD/core/ramfs/*  $RAMFS/; }
+
+ramfs(){
+  mkdir -p $RAMFS/lib/modules
+  cp -r $DESTDIR/lib/u       $RAMFS/lib
+  cp -r $DESTDIR/bin/usplash $RAMFS/bin
+  _steal_kmods $RAMFS virtio-input ext4 usb-storage squashfs overlay \
+    xts aes ctr cbc sha256 dm-crypt; }
+
+postramfs(){ ( cd $RAMFS
+  head -c100 $SOURCES/gearos.img               |
+  md5sum | awk '{print $1}'     > ./gear_md5  &&
+  cp -rv $DESTDIR/bin/busybox     ./bin/      &&
+  chmod a+x                       ./etc/rc    &&
+  bash -n                         ./etc/rc    &&
+  bin/busybox --install ./bin                 &&
+  cp $SOURCES/usplash     bin/                &&
+  mknod -m 660 dev/console c 5 1              &&
+  mknod -m 660 dev/loop0   b 7 0              &&
+  mknod -m 660 dev/ram     b 1 0              &&
+  ln -s /etc/rc ./init                        &&
+  find . | cpio -H newc -o | gzip >$RAMFS.gz; )
+  sync; }
+
+export RAMFS=$SOURCES/initramfs

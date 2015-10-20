@@ -16,7 +16,8 @@ linux_setup_x86(){
   export KERNEL_VERSION=$(ls $SOURCES/linux/lib/modules); }
 
 linux_install_x86(){
-  _steal_kmods $DESTDIR                                   \
-    $( lsmod | awk 'BEGIN{getline}{printf " *"$1".ko "}') \
-    modules.* *dm-crypt.ko *overlay.ko *squashfs.ko       \
-    *wireless* *vesa* *nouveau*;  }
+  _steal_kmods $DESTDIR                               \
+    $( lsmod | awk 'BEGIN{getline}{printf " "$1" "}') \
+    virtio-input ext4 usb-storage squashfs overlay    \
+    xts aes ctr cbc sha256 dm-crypt                   \
+    wireless vesa qxl nouveau;  }

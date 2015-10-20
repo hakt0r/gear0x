@@ -20,40 +20,33 @@ __exec_default(){
 crossinit_default(){ :; }
 
 stick_default(){
-  [ -z "$DEVICE" ] && return 0
-  [ -w "$DEVICE" ] || return 1
+  [ -z "$DEVICE" ] && { echo no $DEVICE; return 0; }
+  [ -w "$DEVICE" ] || { echo no $DEVICE; return 1; }
   [ -f $SOURCES/gearos.img ] || return 1
-  sBUFFER=35
-  sROOT=$((   $(du $DESTDIR|tail -n1|cut -f1) / 1024 ))
-  sKERNEL=$(( 20 + $(du $KERNEL_IMAGE|cut -f1) / 1024 ))
-  sSAFE=$((   $sROOT + $sKERNEL + $sBUFFER ))
-  o(){ while read line; do printf .;done; }
-  printf '[zero]'
-  dd if=/dev/zero of=$DEVICE bs=1M count=1 2>&1|o && _done || { _fail; return 1; }
+
+  dd if=/dev/zero of=$DEVICE bs=1M count=1             &&
+  cat /usr/lib/syslinux/mbr/mbr.bin >$DEVICE           &&
+  sudo parted -ms $DEVICE mktable msdos                &&
+  sudo parted -ms $DEVICE mkpart primary 1 1000M       &&
+  sudo parted $DEVICE set 1 boot on                    &&
+  mkfs.ext2 ${DEVICE}1                                 &&
+  mkdir -p mnt                                         &&
+  mount ${DEVICE}1 mnt                                 &&
+  cp -rf $DESTDIR/* mnt/                               &&
+  mkdir -p mnt/boot                                    &&
+  cp    $KERNEL_IMAGE mnt/boot/                        &&
+  cp    $RAMFS.gz     mnt/boot/                        &&
+  printf 'DEFAULT linux\nLABEL linux\n'\
+'KERNEL /boot/%s\n'\
+'APPEND quiet init=/etc/rc norootdev initrd=/boot/%s' \
+$(basename $KERNEL_IMAGE) $(basename $RAMFS.gz) \
+>mnt/boot/extlinux.conf &&
+  extlinux -i       mnt/boot                           &&
   sync
-  printf '[partion]'
-  printf "o\nn\np\n1\n2048\n+${sKERNEL}M\nn\np\n2\n\n+${sSAFE}M\nw\ny\n" |
-  fdisk $DEVICE                           2>&1|o && _done || { _fail; return 1; }
+  umount mnt
+
   sync
-  printf "[install] $SOURCES/gearos.img "
-  pv $SOURCES/gearos.img               >"$DEVICE"2     && _done || { _fail; return 1; }
-  printf '[mkfs]';  mkfs.ext4 ${DEVICE}1        2>&1|o && _done || { _fail; return 1; }
-  printf '[mkdir]'; mkdir -p mnt                2>&1|o && _done || { _fail; return 1; }
-  printf '[mnt]';   mount ${DEVICE}1 mnt        2>&1|o && _done || { _fail; return 1; }
-  printf "[kernel]"
-  mkdir -p                             mnt/boot 2>&1|o && _done || { _fail; return 1; }
-  cp -v  $KERNEL_IMAGE  mnt/boot 2>&1|o && _done || { _fail; return 1; }
-  cp -rv /boot/grub                    mnt/boot 2>&1|o && _done || { _fail; return 1; }
-  cp -rv $BUILD/core/grub.cfg    mnt/boot/grub/ 2>&1|o && _done || { _fail; return 1; }
-  printf '[umount]'; umount mnt                 2>&1|o && _done || { _fail; return 1; }
-  sync
-  printf "[grub]"
-  mount ${DEVICE}1 mnt                                                               && printf "[mount]"
-  grub-install --force --no-floppy --boot-directory=$PWD/mnt/boot ${DEVICE} 1>&2 | o && printf "[install]"
-  umount mnt                                                                         && printf '[umount]' && _done
-  rm -rf mnt
-  sync
-  _arch_hook qemu            \
+  _arch_hook __qemu          \
    -boot c                   \
    -hdb $SOURCES/storage.img \
    -hda $DEVICE;             }

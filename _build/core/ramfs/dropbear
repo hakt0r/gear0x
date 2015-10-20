@@ -3,6 +3,10 @@
 build(){
   _depend_apt dropbear; }
 
+ramfs(){
+  DESTDIR=$RAMFS _steal_app dropbear dropbearkey dbclient;
+  ln $RAMFS/bin/dbclient $RAMFS/bin/ssh; }
+
 install(){
   _steal_app dropbear dropbearkey dbclient
   ln $DESTDIR/bin/dbclient $DESTDIR/bin/ssh; }

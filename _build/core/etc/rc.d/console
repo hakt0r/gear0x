@@ -1,5 +1,0 @@
-#!/bin/sh
-_usplash menu item    aaa_console      'G.E.A.R console [bash]'      "run_target console vt"
-_usplash menu context aaa_console tmux 'G.E.A.R console [tmux/bash]' "run_target console tmux"
-_usplash menu item    zzz_reboot       'reboot' "reboot -f"
-_usplash menu context zzz_reboot  halt 'halt'   "halt -f"

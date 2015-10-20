@@ -19,7 +19,7 @@ _help(){ printf "
    -a DESTARCH      set $DESTARCH (x86_64|armpi2)
    -e CODE          eval shell script in CODE (after  _arch_init)
    -E CODE          eval shell script in CODE (before _arch_init)
-   -d CODE          execute CODE in $DEBIAN (chroot, emulation if necessary)
+   -d CODE          execute CODE in $DEBIAN  (chroot, emulation if necessary)
    -s CODE          execute CODE in $DESTDIR (chroot, emulation if necessary)
    -D DEVICE        set $DEVICE
    -S               select $DEVICE from list
@@ -33,11 +33,11 @@ _help(){ printf "
   Using as lib:
     1 #!/bin/sh
     2 . ./_build/tool -lib
-    3 _tool -S rebuild 
+    3 _tool -S rebuild
 
 "; }
 
-_version(){ 
+_version(){
   export RELEASE=$(cat $BUILD/release 2>/dev/null || printf experiment)
   export VERSION=$(cat $BUILD/version 2>/dev/null || printf 0xDEADBEEF); }
 
@@ -78,11 +78,11 @@ _require(){
 
     if [ "$target" = build -a "$dname" = "$name" ]
     then                           # copy skel items (on build, if available)
-      for d in $(ls $BUILD/core/skel/)
-      do if [ -d $dir/$d ]
+      for d in $(ls $BUILD/core/ramfs)
+      do if [ -d $BUILD/core/ramfs/$d -a -d $dir/$d ]
         then cp -r $dir/$d $DESTDIR/ && printf "+\e[32m$d\e[0m" >&2 || { printf "+\e[31m$dir/$d[\e0m" >&2; return 1; }
     fi;done;fi
-    
+
     if [ -n "$DEPEND" ]            # require dependencies
     then for d in $DEPEND
       do [ -n "$d" ] && {
@@ -162,7 +162,7 @@ _tool(){ local _loop_
     "-S") _select_device;     shift   ;;
     *   ) _loop_=false;;
   esac; done
-  case "$1" in                     # read and execute command   
+  case "$1" in                     # read and execute command
     "stick")      stick_$DESTARCH;;
     "splash")  shift; _splash  "$@";;
     "test")           _splash_test ;;

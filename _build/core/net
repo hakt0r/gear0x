@@ -10,13 +10,10 @@ build(){
   true; }
 
 install(){ # (: install networking :) - optimize take only what we need
-  echo gear                     > $DESTDIR/etc/hostname
-  echo 127.0.0.1 localhost gear > $DESTDIR/etc/hosts
-
+  echo gear >"$DESTDIR/etc/hostname"
   for l in libnss_files.so libnss_dns.so libnss3.so libnss_compat.so libnssutil3.so libresolv.so
   do _steal_lib $l; done
-
-  rm -f $DESTDIR/bin/brctl
+  rm -f "$DESTDIR/bin/brctl"
   _steal_app \
     brctl iw iwevent iwspy iwpriv iwgetid iwconfig iwlist  \
     wpa_action wpa_passphrase wpa_supplicant wpa_cli \

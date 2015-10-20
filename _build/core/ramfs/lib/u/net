@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set_hostname(){
+  export HOSTNAME=$(cat /etc/hostname 2>/dev/null || echo gear)
+  hostname $HOSTNAME
+  echo 127.0.0.1 $HOSTNAME localhost >> /etc/hosts
+  mkdir -p /run/net/lo
+  ifconfig lo 127.0.0.1; }
+
+_default_net_add(){
+  [ "$INTERFACE" = lo ]      && return 0
+  [ -d /run/net/$INTERFACE ] && return 0 ||
+    mkdir -p /run/net/$INTERFACE
+  { if iw dev $INTERFACE 2>/dev/null
+  then
+    lsmod |grep -I "^aes " ||
+    for m in aes crc32 ccm ctr lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep; do modprobe $m; done
+    wpa_supplicant -P /run/net/$INTERFACE/wpa.pid -i$INTERFACE -c /etc/wpa_supplicant.conf &
+    ifplugd -aIfr /bin/ifplug_event -i $INTERFACE -m wlan
+    sleep 0.2; wpa_cli -P /run/net/$INTERFACE/wpacli.pid -B -a /bin/wpa_event -i $INTERFACE -p /run/wpa_supplicant &
+  else ifplugd -Ifr /bin/ifplug_event -i $INTERFACE
+  fi; } >>/run/net/$INTERFACE/log 2>&1 </dev/null & }

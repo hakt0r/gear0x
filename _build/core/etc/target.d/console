@@ -1,5 +1,4 @@
 #!/bin/sh
-_usplash fini
 export PS1='\[\e[1;41m\]\u\[\e[44m\]\W\[\e[45m\]░\[\e[0m\] ' HOME=/root USER=root HOST=$(hostname)
 while true; do
   # splash; exec openvt -c1 -sw -- /bin/bash

@@ -6,7 +6,13 @@ build(){ _depend_apt_lib \
   net-tools wireless-tools openssh-server \
   bzip2 unrar unlzma zip gzip \
   man tmux vim sudo wget curl pv htop ngrep iotop \
-  i3-wm suckless-tools dwb xinit xserver-xorg-video-vesa xserver-xorg-video-vesa; }
+  i3-wm suckless-tools dwb xinit \
+  xserver-xorg-video-qxl    \
+  xserver-xorg-video-vesa   \
+  xserver-xorg-video-fbdev  \
+  xserver-xorg-video-intel  \
+  xserver-xorg-video-nouveau;
+  _arch_hook build_xorg; }
 
 install(){
   _steal_app dmenu i3 xinit Xorg pv htop lspci dwb ngrep iotop;
@@ -17,4 +23,5 @@ install(){
    libattr.so.1 libpng12.so.0 libz.so.1 libm.so.6 libgcc_s.so.1
   do _steal_lib $l
   done
-  cp -R $DEBIAN/etc/X11 $DESTDIR/etc/; }
+  cp -R $DEBIAN/etc/X11 $DESTDIR/etc/
+  _arch_hook install_xorg; }

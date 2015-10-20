@@ -8,6 +8,7 @@ build(){
 install(){
   rm -f $DESTDIR/bin/bash
   rm -f $DESTDIR/bin/wget
+  _steal_lib libnsl libnspr4 libplc4 libplds4
   _steal_app \
     wget bash dash \
     ldd ldconfig ldconfig.real \

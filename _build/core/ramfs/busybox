@@ -1,10 +1,10 @@
 #!/bin/sh
 
 build(){
+  _debroot_compile $BUILD/arch/src/usplash.c $SOURCES/usplash
   [ -z "$(_arch_file busybox)" ] &&
   _depend_apt busybox busybox-static
-  _depend_apt tmux
-  _depend_apt tic ncurses-bin; }
+  _depend_apt tmux; }
 
 install(){
   local busybox=$(_arch_file busybox)
@@ -12,6 +12,7 @@ install(){
   then cp $busybox $DESTDIR/bin/busybox
   else _steal_app busybox
   fi
+  cp $SOURCES/usplash $DESTDIR/bin/
   # install busybox
   $DESTDIR/bin/busybox --list-full |
   while read item
@@ -22,4 +23,4 @@ install(){
   # copy terminfo
   cp -r /lib/terminfo $DESTDIR/lib/
   # copy tic, tmux
-  _steal_app tic tmux; }
+  _steal_app tmux; }

@@ -1,4 +1,0 @@
-#!/bin/sh
-mkdir -p /run/net
-hostname $(cat /etc/hostname)
-ifconfig lo 127.0.0.1

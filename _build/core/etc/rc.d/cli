@@ -1,0 +1,4 @@
+#!/bin/sh
+[ -n "$USPLASH_SOCK" ] || return 0
+usplash -i boot:bash -t 'G.E.A.R console [bash]'      -a "ugear run_target console vt"
+usplash -i boot:tmux -t 'G.E.A.R console [tmux/bash]' -a "ugear run_target console tmux"
