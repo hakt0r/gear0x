@@ -89,6 +89,7 @@ cryptomount_postsystem(){ local dev= dest= boot=
   usplash -q ". /lib/u/gear; crypto_boot"; }
 
 crypto_boot(){
+  killall -9 dropbear
   touch /run/trystart
   PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
   rm /system/init

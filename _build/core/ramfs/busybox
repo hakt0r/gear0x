@@ -2,16 +2,12 @@
 
 build(){
   _debroot_compile $BUILD/arch/src/usplash.c $SOURCES/usplash
-  [ -z "$(_arch_file busybox)" ] &&
-  _depend_apt busybox busybox-static
+  _arch_file_or_depend busybox busybox-static
+  _arch_file_or_steal  busybox $SOURCES/
   _depend_apt tmux; }
 
 install(){
-  local busybox=$(_arch_file busybox)
-  if [ -n "$busybox" ]
-  then cp $busybox $DESTDIR/bin/busybox
-  else _steal_app busybox
-  fi
+  _arch_file_or_steal busybox $DESTDIR/bin/
   cp $SOURCES/usplash $DESTDIR/bin/
   # install busybox
   $DESTDIR/bin/busybox --list-full |

@@ -19,7 +19,7 @@ rebuild-debug:
 		busybox sh _build/tool -v make installer debug
 
 ramfs:
-		busybox sh _build/tool -p ramfs make
+		busybox sh _build/tool -p build,ramfs make
 ramfs-to-stick: ramfs
 	mount /dev/sdb1 /mnt
 	cp x86_64/initramfs.gz /mnt/boot/

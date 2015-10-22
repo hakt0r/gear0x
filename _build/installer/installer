@@ -21,8 +21,8 @@ build(){
   _depend_apt debootstrap; }
 
 install(){
-  for f in dpkg-deb sed ar tar; do rm -f $DESTDIR/bin/$f;done
-  _steal_app openssl mkfs.ext4 fsck.ext2 fsck.ext4 sed tar ar dpkg-deb kexec
+  for f in sed ar tar; do rm -f $DESTDIR/bin/$f;done
+  _steal_app openssl mkfs.ext4 fsck.ext2 fsck.ext4 sed tar ar kexec
 
   __patch(){ cat $1 | sed '
     s|/usr/share/debootstrap|/lib/debootstrap|g

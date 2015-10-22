@@ -36,6 +36,8 @@ preimage(){
       p=$(echo $lib | sed 's/.[0-9]\+.[0-9]\+$//');         [ -e "$p" ] || ln -s "$lib" "$p"
       p=$(echo $lib | sed 's/.[0-9]\+$//');                 [ -e "$p" ] || ln -s "$lib" "$p"
     done; )
+  # FIXME: remove ugear spash
+  rm -rf $DESTDIR/lib/u $DESTDIR/bin/busybox $DESTDIR/bin/usplash
   # (: pack it up :)
   pack_$DESTARCH; }
 

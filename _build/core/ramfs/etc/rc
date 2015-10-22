@@ -24,7 +24,6 @@ basemounts(){
   $B ln -sf $1/proc/self/fd/2 $1/dev/stderr
   for mod in usb-storage squashfs overlay xts aes ctr cbc sha256 dm-crypt; do
     $B modprobe $mod >/dev/null 2>&1; done;
-  # [ -z "$ROWS" ] && detect_tty_size
   exec /bin/usplash \
     -H "$(printf "\e[1;44;33m GEAR0x Initramfs")" \
     -F "$(printf "\e[1;44;34m GEAR0x a minimal hackable OS")" \
@@ -53,9 +52,7 @@ gear0x(){ local B=busybox MD5=$(busybox cat /gear_md5)
     usplash -i boot -t " switching to GEAR[$dev] " -a "df"
     $B mkdir /run/.work /run/.overlay /run/overlay
     $B mount -t overlay -o lowerdir=/run/rootfs,upperdir=/run/.overlay,workdir=/run/.work overlay /run/overlay
-    $B cp -rf /bin/*       /run/overlay/bin/
-    $B cp -rf /lib/u       /run/overlay/lib/
-    $B cp     /etc/*       /run/overlay/etc/
+    $B cp -Rf /bin /lib /etc /run/.overlay/
     $B ln -sf /proc/mounts /run/overlay/etc/mtab
     local d; for d in run proc dev sys
      do $B mount -o bind /$d /run/overlay/$d
@@ -64,18 +61,19 @@ gear0x(){ local B=busybox MD5=$(busybox cat /gear_md5)
   _find_gear(){
     for dev in $(ls /sys/class/block 2>/dev/null)
     do if [ "$($B head -c 100 /dev/$dev | $B md5sum | awk '{print $1}')" = $MD5 ]
-      then $B mount /dev/$dev /run/rootfs >/dev/null 2>&1 && _switch_to_gear >/run/switchlog 2>&1
+      then $B mount /dev/$dev /run/rootfs >/dev/null 2>&1 && _switch_to_gear
       else
         $B mount /dev/$dev /run/rootfs >/dev/null 2>&1  &&
         [ -f "/run/rootfs/etc/release" ]                &&
         [ "cazuza" = "$(cat /run/rootfs/etc/release)" ] &&
-        _switch_to_gear >/run/switchlog 2>&1
+        _switch_to_gear
         $B umount -f /run/rootfs >/dev/null 2>&1; fi; done; }
   usplash -i boot         -t " finding more GEAR ..." -a "INIT_MODULE=rescue . /etc/rc"
   usplash -i boot:rescue  -t "$(printf ' \x1b[1;43;37m rescue console \x1b[0m')" -a "INIT_MODULE=rescue . /etc/rc"
   usplash -i boot:debug   -t 'debug' -a "usplash -q '/bin/busybox sh'"
   usplash -i boot:reboot  -t 'reboot'                 -a "reboot -f"
   usplash -i boot:halt    -t 'halt'                   -a "halt -f"
+  usplash -i net          -t "net[searching]"         -a ":"
   usplash -i crypto       -t "crypto[searching]"      -a "ugear cryptodetect"
   usplash -i crypto:mount -t "crypto[mount]"          -a "ugear cryptomount"
   cryptodetect
@@ -83,6 +81,7 @@ gear0x(){ local B=busybox MD5=$(busybox cat /gear_md5)
   for mount_attempt in $(seq 1 3);do _find_gear; sleep 0.05; done; }
 
 rc_d(){
+  set_hostname
   early_dropbear
   hotplug
   for lib in $(ls /etc/rc.d|sort) # run rc-scripts

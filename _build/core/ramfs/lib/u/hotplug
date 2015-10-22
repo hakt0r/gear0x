@@ -1,0 +1,41 @@
+#!/bin/sh
+
+hotplug(){
+  mkdir -p /run/hotplug/
+  # fire hotplug event for devices that are already present
+  local c= d=
+  for c in net block; do for d in $(ls /sys/class/$c)
+    do { EARLY=early ACTION=add SUBSYSTEM=$c DEVICE=$d INTERFACE=$d hotplug_event $c; } &
+  done; done
+  echo /bin/hotplug_event >/proc/sys/kernel/hotplug;
+  # load drivers for devices that are already present
+  awk '
+  function addev(a){ if(!uniq[a]){ dev[++dc] = a; uniq[a] = 1 }}
+  function madev(m,o,i){
+    for(i=1;i<dc;i++){
+      if(0 < match(dev[i],m)){
+        system("modprobe " o " &")
+        dev[i] = "void"
+        break }}}
+  BEGIN{
+  SYS = "cat /sys/bus/*/devices/*/modalias"
+  while( 0 < (SYS|getline) ){
+    if(!index($0," ")){
+         if(0<match($0,/pci:/)){ o = o "\\(" substr($0,1,22) "\\)\\|" }
+    else if(0<match($0,/usb:/)){ o = o "\\(" substr($0,1,14) "\\)\\|" }
+    else { o = o "\\(" $0              "\\)\\|" }
+    addev($0) }
+  } close(SYS)
+  GREP = sprintf("grep -i \"%s\" /lib/modules/$(uname -r)/modules.alias",substr(o,1,length(o)-2))
+  while((GREP|getline)>0){
+    gsub(/\*/,".*",$2)
+    madev($2,$3)
+  } close(GREP) }' & }
+
+hotplug_event(){
+  exec >>/run/hotplug/log 2>&1
+  echo $SUBSYSTEM:$INTERFACE:$DEVICE:$ACTION
+  local hook= dir=/etc/on/$SUBSYSTEM/$ACTION
+  for hook in $(ls $dir/* 2>/dev/null)
+  do . $hook || return; done
+  run_hook _default_${SUBSYSTEM}_${ACTION}; }

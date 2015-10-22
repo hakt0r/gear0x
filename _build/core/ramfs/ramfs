@@ -1,5 +1,5 @@
 #!/bin/sh
-depend @busybox @crypto @dropbear
+depend @ramfs/busybox @ramfs/crypto @ramfs/dropbear
 
 preramfs(){
   [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/arch/src/usplash.c $SOURCES/usplash
@@ -9,15 +9,14 @@ preramfs(){
 
 ramfs(){
   mkdir -p $RAMFS/lib/modules
-  cp -r $DESTDIR/lib/u       $RAMFS/lib
-  cp -r $DESTDIR/bin/usplash $RAMFS/bin
-  _steal_kmods $RAMFS virtio-input ext4 usb-storage squashfs overlay \
-    xts aes ctr cbc sha256 dm-crypt; }
+  _steal_kmods $RAMFS virtio-input ext4 usb-storage squashfs overlay xts aes ctr cbc sha256 \
+    dm-crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep;
+  cp $KERNEL_MODULES/modules.dep $KERNEL_MODULES/modules.alias $RAMFS/lib/modules/$KERNEL_VERSION; }
 
 postramfs(){ ( cd $RAMFS
   head -c100 $SOURCES/gearos.img               |
   md5sum | awk '{print $1}'     > ./gear_md5  &&
-  cp -rv $DESTDIR/bin/busybox     ./bin/      &&
+  cp -rv $SOURCES/busybox         ./bin/      &&
   chmod a+x                       ./etc/rc    &&
   bash -n                         ./etc/rc    &&
   bin/busybox --install ./bin                 &&
@@ -26,6 +25,7 @@ postramfs(){ ( cd $RAMFS
   mknod -m 660 dev/loop0   b 7 0              &&
   mknod -m 660 dev/ram     b 1 0              &&
   ln -s /etc/rc ./init                        &&
+  DESTDIR=$RAMFS _steal_app openssl mkfs.ext4 fsck.ext2 fsck.ext4 sed tar ar switch_root &&
   find . | cpio -H newc -o | gzip >$RAMFS.gz; )
   sync; }
 

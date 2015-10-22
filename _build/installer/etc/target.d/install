@@ -183,12 +183,12 @@ apt_update(){ _status "apt: update"
 apt_install(){ _status "debian: install"
   _chroot_ $ROOTFS apt-get install             \
     -y --no-install-recommends                 \
-    consolekit whiptail dbus                   \
+    consolekit dbus                            \
     usbutils pciutils apt-utils                \
     net-tools wireless-tools openssh-server    \
     bzip2 unrar lzma zip gzip                  \
     man tmux vim sudo wget curl pv htop        \
-    i3 slim xinit \
+    i3 slim xinit suckless-tools               \
     xserver-xorg-input-all xserver-xorg-video-all \
     2>&1 | _subtask; }
 

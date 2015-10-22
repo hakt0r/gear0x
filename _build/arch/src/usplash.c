@@ -581,12 +581,14 @@ void rpc_read(void){
       goto TRY_READ; }}}
 
 int rpc_send(char* buf){
-  struct sockaddr_un addr; int bytes=0,len;
+  struct sockaddr_un addr; int bytes=0,len,tries=0;
   char *socket_path = getenv("USPLASH_SOCK"); if (!socket_path) socket_path = "./socket";
   if ((UNIXFD = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) _fatal("[socket] error");
   unblock(UNIXFD); memset(&addr, 0, sizeof(addr)); addr.sun_family = AF_UNIX;
   strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path)-1);
-  if ( connect(UNIXFD, (struct sockaddr*) &addr, sizeof(addr)) == -1) _fatal("connect error");
+  while ( connect(UNIXFD, (struct sockaddr*) &addr, sizeof(addr)) == -1)
+    if ( 3 == tries++ ) { printf("sock: %s\n",socket_path); _fatal("connect error"); }
+    else sleep(0.05);
   len = strlen(buf); int written = 0;
   while ( written < len && 0 < ( bytes = write(UNIXFD,buf+written,len) ))
     if ( bytes > 0 ) written += bytes; else _fatal("write error");
@@ -601,7 +603,7 @@ void rpc_init(void){
   strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path)-1);
   unlink(socket_path);
   if (bind(UNIXFD, (struct sockaddr*)&addr, sizeof(addr)) == -1)    _fatal("[socket] bind error");
-  if (listen(UNIXFD, 5) == -1)                                      _fatal("[socket] listen error");
+  if (listen(UNIXFD, 128) == -1)                                    _fatal("[socket] listen error");
   RPC_CLIENT  = UMap_create();
   RPC_COMMAND = UMap_create();
   io_setflow(UNIXFD,0,rpc_read); }

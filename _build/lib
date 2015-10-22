@@ -119,16 +119,22 @@ _depend_apt(){
   bin=$(_exec_debroot "which $bin") 2>/dev/null
   [ -n "$bin" ] || _exec_debroot "apt-get install -y --no-install-recommends $lib"; }
 
+_arch_file_or_depend(){
+  local file="$1" package="$2"; [ -n "$2" ] || package="$1"
+  [ -z "$(_arch_file $file)" ] && _depend_apt $file $package; }
+
 _steal_kmod(){  local dest="$1"; shift
   local src="$SOURCES/linux" dir=
   local mods="$src/lib/modules/$KERNEL_VERSION"
   [ -f "$mods/modules.dep.bin" ] || {
     printf "\e[1;43;30m depmod -b $src $KERNEL_VERSION \e[0m" >&2
     $(which depmod) -b "$src"     $KERNEL_VERSION; }
+  [ -f "$mods/modules.dep" ] || {
+    printf "\e[1;43;30m busybox depmod -b $src $KERNEL_VERSION \e[0m" >&2
+    $SOURCES/busybox depmod -b "$src" $KERNEL_VERSION; }
   [ -d $mods ] || { printf "\e[1;42;30m $mods \e[0m" >&2; return 1; }
   $(which modprobe) -d "$src" -S "$KERNEL_VERSION" -D "$1" |
-    sed "/^builtin /d" |
-    sed "s|insmod $src||g" |
+    sed "/^builtin /d;s|insmod $src||g" |
   while read file
   do dir="$dest/$(dirname $file)"
      [ -d "$dir" ]        || mkdir -p      "$dir"
@@ -145,6 +151,7 @@ _steal_app(){ (
     test -f $DEBIAN/$a   || app=$(_exec_debroot "which $a")
     test -f $DEBIAN/$app || { printf "[\e[31m$a\e[0m]" >&2; return 1; }
     printf "[\e[33mapp\e[0m:\e[35m$(basename $a)\e[0m]" >&2
+    rm -f $DESTDIR/bin/$a
     cp $DEBIAN/$app $DESTDIR/bin/
     _steal_libs $app
   done; ); }
@@ -173,6 +180,13 @@ _steal_lib(){ (
   elif [ -f $DESTDIR/lib/$(basename $LIB) ]; then printf '\e[33m=\e[0m' >&2
   else { printf '\e[32m[%s]\e[0m' $dep >&2; cp $LIB $DESTDIR/lib/; }; fi; )
   true; }
+
+_arch_file_or_steal(){
+  local file=$(_arch_file $1)
+  if [ -n "$file" ]
+    then cp $file $2/$1
+    else _steal_app $1
+  fi; }
 
 _select_device(){
   _lsblk(){ lsblk -pl | awk '

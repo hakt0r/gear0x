@@ -1,13 +1,20 @@
 #!/bin/sh
 
+net_devs      (){ ifconfig -a   2>/dev/null | grep -o '^[a-z]\+[a-z0-9.:]\+'; }
+net_wifi_devs (){ iw dev | awk '/Interface/{print $2}' 2>/dev/null; }
+net_eth_devs  (){ ( ifconfig -a 2>/dev/null | grep encap:Ethernet | awk '{print $1}'; net_wifi_devs; ) | sort | uniq -u; }
+
 set_hostname(){
   export HOSTNAME=$(cat /etc/hostname 2>/dev/null || echo gear)
   hostname $HOSTNAME
   echo 127.0.0.1 $HOSTNAME localhost >> /etc/hosts
   mkdir -p /run/net/lo
-  ifconfig lo 127.0.0.1; }
+  ifconfig lo 127.0.0.1;
+  usplash -i net -t "net["$(net_devs)"]" -a ':'; }
 
 _default_net_add(){
+  echo "$ACTION: $INTERFACE $EARLY"
+  usplash -i net:$INTERFACE -t "$INTERFACE[detected]" -a ':'
   [ "$INTERFACE" = lo ]      && return 0
   [ -d /run/net/$INTERFACE ] && return 0 ||
     mkdir -p /run/net/$INTERFACE
