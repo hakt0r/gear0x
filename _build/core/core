@@ -1,6 +1,6 @@
 #!/bin/sh
 
-depend @linux @ramfs @net
+depend @linux ramfs @net
 
 prebuild(){
   # (: reset build / copy skeleton :)

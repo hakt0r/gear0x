@@ -78,8 +78,8 @@ _require(){
 
     if [ "$target" = build -a "$dname" = "$name" ]
     then                           # copy skel items (on build, if available)
-      for d in $(ls $BUILD/core/ramfs)
-      do if [ -d $BUILD/core/ramfs/$d -a -d $dir/$d ]
+      for d in $(ls $BUILD/ramfs)
+      do if [ -d $BUILD/ramfs/$d -a -d $dir/$d ]
         then cp -r $dir/$d $DESTDIR/ && printf "+\e[32m$d\e[0m" >&2 || { printf "+\e[31m$dir/$d[\e0m" >&2; return 1; }
     fi;done;fi
 

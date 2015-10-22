@@ -5,7 +5,7 @@ preramfs(){
   [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/arch/src/usplash.c $SOURCES/usplash
   rm -rf $RAMFS $RAMFS.gz
   mkdir -p $RAMFS;
-  cp -rv $BUILD/core/ramfs/*  $RAMFS/; }
+  cp -rv $BUILD/ramfs/*  $RAMFS/; }
 
 ramfs(){
   mkdir -p $RAMFS/lib/modules
