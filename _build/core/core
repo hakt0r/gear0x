@@ -1,53 +1,91 @@
 #!/bin/sh
+{ export RAMFS=$SOURCES/initramfs
+depend @linux @busybox @crypto @dropbear @installer @net @debug
 
-depend @linux ramfs @net
+deps(){
+  _depend_apt_host mksquashfs squashfsutils
+  _depend_apt_host parted;
+  _depend_apt_host extlinux; }
 
-prebuild(){
-  # (: reset build / copy skeleton :)
-  rm -rf $DESTDIR
-  rm -rf $DESTDIR
-  mkdir -p $DESTDIR; }
+tests(){ _run_kvm -x >&2; }
+
+preramfs(){ local DESTDIR=$RAMFSlocal DESTDIR=$RAMFS
+  [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash
+  rm -rf $DESTDIR $RAMFS.gz
+  mkdir -p $DESTDIR;
+  cp -rv $BUILD/core/*/  $DESTDIR/
+  echo /lib > $DESTDIR/etc/ld.so.conf; }
+
+ramfs(){ local DESTDIR=$RAMFSlocal DESTDIR=$RAMFS
+  mkdir -p $DESTDIR/lib/modules/$KERNEL_VERSION
+  cp $KERNEL_MODULES/modules.* $DESTDIR/lib/modules/$KERNEL_VERSION/
+  _steal_kmods $DESTDIR virtio_input ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
+    dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
+    usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
+    mmc_block fat vfat isofs md_mod thermal sd_mod sg efivars; }
+
+postramfs(){ local DESTDIR=$RAMFS
+( cd $DESTDIR
+  _version_increment
+  ldd /lib/* 2>&1 | grep 'not found' | sort | uniq | awk 'BEGIN{ORS=" "}{print $1}'
+  head -n1 /etc/passwd > etc/passwd
+  head -n1 /etc/group  > etc/group
+  [ -d $BWD/_local ] && cp -r $BWD/_local/* ./
+  local f; for f in version release
+  do cat $BUILD/$f > etc/$f
+  done
+  echo $DESTARCH >etc/arch
+  mkdir -p $SOURCES/release
+  ldconfig.real -r $DESTDIR -c etc/ld.so.conf   &&
+  cp -rv $SOURCES/busybox         ./bin/        &&
+  cp $SOURCES/usplash     bin/                  &&
+  mknod -m 660 dev/console c 5 1                &&
+  mknod -m 660 dev/loop0   b 7 0                &&
+  mknod -m 660 dev/ram     b 1 0                &&
+  ln -s /etc/rc ./init                          &&
+  _steal_app openssl mkfs.ext4 fsck.ext2 \
+               fsck.ext4 sed tar ar switch_root &&
+  bash -n                         ./etc/rc      &&
+  chmod a+x                       ./etc/rc      &&
+  chmod a+x                       ./bin/*       &&
+  find . | cpio -H newc -o | gzip >$RAMFS.gz; ) &&
+  cp $RAMFS.gz $SOURCES/release/ && sync; }; }
+
+stick(){
+  [ -z "$DEVICE" ] && { echo no DEVICE:"'$DEVICE'"; return 0; }
+  [ -w "$DEVICE" ] || { echo nw DEVICE:"'$DEVICE'"; return 1; }
+  dd if=/dev/zero of=$DEVICE bs=1M count=1      &&
+  cat /usr/lib/syslinux/mbr/mbr.bin >$DEVICE    &&
+  sudo parted -ms $DEVICE mktable msdos         &&
+  sudo parted -ms $DEVICE mkpart primary 1 500M &&
+  sudo parted $DEVICE set 1 boot on             &&
+  _arch_hook bootfs                             &&
+  mkdir -p mnt                                  &&
+  mount ${DEVICE}1         mnt                  &&
+  cp -rf $DESTDIR/*        mnt/                 &&
+  mkdir -p                 mnt/boot             &&
+  cp    $KERNEL_IMAGE      mnt/boot/            &&
+  cp    $RAMFS.gz          mnt/boot/            &&
+  cp    $SOURCES/release/* mnt/boot/            &&
+  _arch_hook bootloader && sync && umount mnt; }
+
+bootfs_default(){
+  mkfs.ext2 ${DEVICE}1; }
+bootloader_default(){ printf \
+'DEFAULT linux\nLABEL linux\n'\
+'KERNEL /boot/%s\n'\
+'APPEND quiet init=/etc/rc norootdev initrd=/boot/%s'\
+ $(basename $KERNEL_IMAGE) $(basename $RAMFS.gz)\
+> mnt/boot/extlinux.conf &&
+  extlinux -i mnt/boot; }
+
+preinstall(){
+  mkdir -p $DESTDIR/.gear
+  echo $EXTENSION > $DESTDIR/.gear/extension; }
 
 postinstall(){
-  # (: tweak skeleton :)
-  echo $DESTARCH_MULTI > $DESTDIR/etc/arch
-  echo /lib            > $DESTDIR/etc/ld.so.conf
-  head -n1 /etc/passwd > $DESTDIR/etc/passwd
-  head -n1 /etc/group  > $DESTDIR/etc/group;
-  [ -d $BWD/_local ] && cp -r $BWD/_local/* $DESTDIR/
-  true; }
-
-preimage(){
-  # (: here we count versions :D :)
-  _version_increment
-  echo $VERSION >$DESTDIR/etc/version
-  echo $RELEASE >$DESTDIR/etc/release
-  # (: setup /bin and /etc/rc :)
-  chmod a+x $DESTDIR/etc/rc
-  chmod a+x $DESTDIR/bin/*
-  # (: setup /lib (ldconfig) :)
-  # FIXME: ldconfig wont work for cross-compiling to armpi2
-  ldconfig.real -r $DESTDIR -f etc/ld.so.conf -c etc/ld.so.cache
-  # WORKAROUND: good old link-frenzy in /lib
-  ( cd $DESTDIR/lib
-    for lib in $(ls *.so.*)
-    do local p=
-      p=$(echo $lib | sed 's/.[0-9]\+.[0-9]\+.[0-9]\+$//'); [ -e "$p" ] || ln -s "$lib" "$p"
-      p=$(echo $lib | sed 's/.[0-9]\+.[0-9]\+$//');         [ -e "$p" ] || ln -s "$lib" "$p"
-      p=$(echo $lib | sed 's/.[0-9]\+$//');                 [ -e "$p" ] || ln -s "$lib" "$p"
-    done; )
-  # FIXME: remove ugear spash
-  rm -rf $DESTDIR/lib/u $DESTDIR/bin/busybox $DESTDIR/bin/usplash
-  # (: pack it up :)
-  pack_$DESTARCH; }
-
-image(){
   # (: build squashfs-image :)
-  printf "${_BPP}[\e[32mbuilding gearos\e[0m] " >&2
-  rm -f  $SOURCES/gearos.img
-  ( cd $DESTDIR; mksquashfs ./ $SOURCES/gearos.img -all-root -comp xz; )
-  printf "${_BPP}\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/gearos.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/gearos.img|cut -f1) >&2; }
-
-tests(){ _run_kvm -x; }
-
-poststick(){ _arch_hook stick; }
+  printf "${_BPP}[\e[32mbuilding gearos/%s\e[0m] " $EXTENSION >&2
+  rm -f  $SOURCES/$EXTENSION.img
+  ( cd $DESTDIR; mksquashfs ./ $SOURCES/$EXTENSION.img -all-root -comp xz; )
+  printf "${_BPP}\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/$EXTENSION.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/$EXTENSION.img|cut -f1) >&2; }

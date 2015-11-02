@@ -1,0 +1,13 @@
+#!/bin/sh
+exec >>/run/net/$interface/log 2>&1
+echo $interface:dhcp: $@ $ip $subnet $broadcast $routers
+case "$1" in
+  'bound')
+    usplash -i net:$interface -t "$interface: $ip" -a ''
+    ifconfig $interface $ip $subnet $broadcast up
+    test -z "$router" || {
+      while route del default; do echo "del default gw"; done
+      echo "add default gw: $router"
+      route add default gw $router; }
+    test -z "$dns"    || echo nameserver $dns > /etc/resolv.conf;;
+esac

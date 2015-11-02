@@ -1,0 +1,210 @@
+#!/bin/sh
+
+. /lib/u/gear
+
+
+export DEVICE= OPTION=   HOMEFS=    HOMEFSPW=
+export ROOTFS= ROOTFSPW= MASTERKEY= MASTERKEYFS=
+export ROOTPW= USERNAME= USERPW=
+export MIRROR= VERSION=
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LD_LIBRARY_PATH=/lib/$(cat /etc/arch)
+
+[ -z "$VERSION" ] && VERSION=sid
+[ -z "$MIRROR"  ] && MIRROR=http://ftp.de.debian.org/debian
+
+ln -s /run /tmp
+
+new_main(){ local SPARSE= dev=
+  select_device -pl "Select SPARSE device [temp]" SPARSE; dev=$(basename $SPARSE)
+  usplash -H "Continue?" -y || return 1
+  export ISOURL=http://cdimage.debian.org/debian-cd/current-live/amd64/webboot/debian-live-8.2.0-amd64-standard.squashfs
+  # wget -O $SPARSE $ISOURL
+  mkdir -p /run/block/$dev/mount
+  return; }
+
+_chroot_(){
+  chroot "$@"; }
+
+_status(){
+  echo $@
+  usplash -i zzz_install -t "$@"; }
+
+_subtask(){
+  while read line
+    do [ -n "$line" ] && {
+      echo "$line" >> /run/install/debootstrap.log
+      usplash -i zzzz_status -t "$line"; }
+  done; usplash -d zzzz_status; }
+
+select_device(){
+  export "$3"=$(usplash -H " $2" -s "$(
+    lsblk "$1" | awk 'BEGIN{getline}{h[i++]=$1}END{for(o=0;o<i;o++)print h[o]}';
+    echo /dev/null;
+  )"); }
+
+select_options(){
+  export OPTION=$(usplash -H " Choose your venom" -c '
+s  1 Encrypt /
+h  1 Separate /home
+hf 1 Format
+hc 1 Encrypt
+k  1 Use Masterkey
+kc 0 Create
+km 0 Mount from Device
+ks 0 Mount via SSH
+a  0 Advanced
+af 0 Format Disks
+'); }
+
+get_input(){
+  export "$2"=$(usplash -H " $1" -p); }
+
+confirmed_pw(){
+  local pw1= pw2= q=$1
+  while [ -z "$pw1" -o ! "$pw1" = "$pw2" ]
+  do
+    pw1=$(usplash -H " Enter $q"   -P)
+    pw2=$(usplash -H " Confirm $q" -P)
+  done
+  export "$2"="$pw1"; }
+
+_opt(){ echo $OPTION | grep -qI $1; }
+_qky(){ _opt k && return 1 || _opt $1 && return 0; }
+
+query_install(){
+  select_options OPTION
+
+  while _opt af
+  do select_device -pl " Please select device"      DEVICE
+    fdisk $DEVICE
+    usplash -H" Done formatting?" -y && break
+  done
+
+  if _opt k; then
+  select_device -pl " Please select Masterkey"      MASTERKEYFS
+  confirmed_pw " Masterkey [$MASTERKEYFS]"          MASTERKEY
+  fi
+  select_device -pl " Please select /"              ROOTFS
+  _qky s && confirmed_pw "password for [$ROOTFS]"   ROOTFSPW
+  if _opt h; then
+  select_device -pl " Please select /home"          HOMEFS
+  _qky hc && confirmed_pw "password for [$HOMEFS]"  HOMEFSPW
+  fi
+
+  confirmed_pw   "a ROOT password"                  ROOTPW
+  get_input      "Enter a USER name"                USERNAME
+  confirmed_pw   "[$USERNAME]'s password"           USERPW
+
+  usplash -H " Begin installation?" -y; }
+
+bootstrap_mounts(){
+  _status 'beginning installation'
+  local create=$(_opt kc && echo true || echo false)
+  # MASTERKEY
+  if _opt k;  then
+  if $create; then
+  _status "keyfs: create"; printf "%s" "$MASTERKEY" | cryptsetup -q luksFormat $MASTERKEYFS    || { _status "keyfs-error: create $MASTERKEYFS"; return 1; }
+  fi
+  _status "keyfs: verify"; cryptsetup isLuks $MASTERKEYFS                                      || { _status "keyfs-error: verify $MASTERKEYFS"; return 1; }
+  _status "keyfs: open";   printf "%s" "$MASTERKEY" | cryptsetup luksOpen $MASTERKEYFS gearkey || { _status "keyfs-error: onopen $MASTERKEYFS"; return 1; }
+  if $create; then
+  _status "keyfs: mkfs";  mkfs.ext4 /dev/mapper/gearkey                                        || return 1
+  fi
+  _status "keyfs: mkdir"; mkdir -p /boot/key01
+  _status "keyfs: mount"; mount /dev/mapper/gearkey /boot/key01                                || return 1
+  # MASTERKEY: GEAR
+  if $create; then
+  _opt s  && ROOTFSPW="$(openssl rand 4096)"
+  _opt hc && HOMEFSPW="$(openssl rand 4096)"
+  mkdir /boot/key01/.gearos
+  echo boot/key > /boot/key01/.gearos/mount
+  fi;fi
+  # ROOTFS
+  if _opt s; then
+  _status '/ format';      printf "%s" "$ROOTFSPW" | cryptsetup luksFormat $ROOTFS         || return 1
+  _status '/ open';        printf "%s" "$ROOTFSPW" | cryptsetup luksOpen   $ROOTFS system  || return 1
+  _opt s && printf "%s" "$ROOTFSPW" >/boot/key01/$(blk_uuid $ROOTFS)
+  ROOTFS=/dev/mapper/system
+  fi
+  _status '/ mkfs';        mkfs.ext4 $ROOTFS                                               || return 1
+  _status '/ mkdir';       mkdir -p /system;
+  _status '/ mount';       mount $ROOTFS /system                                           || return 1
+  # ROOTFS: GEAR
+  ROOTFS=/system; mkdir -p $ROOTFS/.gearos
+  echo system             >$ROOTFS/.gearos/mount
+  echo debian:$VERSION    >$ROOTFS/.gearos/release
+  # HOMEFS
+  if _opt h; then
+  if _opt hc; then
+  if _opt hf; then
+  _status '/home: format'; printf "%s" "$HOMEFSPW" | cryptsetup luksFormat $HOMEFS         || return 1
+  fi
+  _status '/home: open';   printf "%s" "$HOMEFSPW" | cryptsetup luksOpen $HOMEFS home      || return 1
+  _opt k && printf "%s" "$HOMEFSPW" >/boot/key01/$(blk_uuid $HOMEFS)
+  HOMEFS=/dev/mapper/home
+  fi
+  if _opt hf; then
+  _status '/home: mkfs';   mkfs.ext4 $HOMEFS                                               || return 1
+  fi
+  _status '/home: mkdir';  mkdir -p /system/home;
+  _status '/home: mount';  mount $HOMEFS /system/home                                      || return 1
+  # HOMEFS: GEAR
+  HOMEFS=/system/home; mkdir $HOMEFS/.gearos
+  echo system/home          >$HOMEFS/.gearos/mount
+  fi; _status "ready to roll"; true; }
+
+do_install(){
+  do_debootstrap        &&
+  apt_init              &&
+  apt_update            &&
+  apt_install           &&
+  set_user_and_password &&
+  { usplash -i "aaa_boot" -t "boot installed system" -a "ugear cryptomount_system"
+    _status "ready to boot";   return 0; } ||
+  { _status "install: failed"; return 1; }; }
+
+do_debootstrap(){ _status "apt: bootstrapping"
+  debootstrap --no-check-gpg --variant=minbase --arch=$(deb_arch) \
+    $VERSION $ROOTFS $MIRROR 2>&1 | _subtask; }
+
+set_user_and_password(){ _status "user and password"
+  printf "root:$ROOTPW\n" |
+  _chroot_ $ROOTFS chpasswd
+  _chroot_ $ROOTFS useradd -m -s "/bin/bash" $USERNAME
+  printf "$USERNAME:$USERPW\n" |
+  _chroot_ $ROOTFS chpasswd $USERNAME; }
+
+apt_init(){ _status "apt: init"
+echo "\
+deb $MIRROR/ $VERSION main contrib non-free
+deb $MIRROR/ $VERSION-updates main contrib non-free
+# deb $MIRROR/ $VERSION-backports main
+deb http://security.debian.org/ $VERSION/updates main
+" >$ROOTFS/etc/apt/sources.list
+echo 'Acquire::Languages "none";
+' >$ROOTFS/etc/apt/apt.conf.d/99translations; }
+
+apt_update(){ _status "apt: update"
+  _chroot_ $ROOTFS apt-get update 2>&1 | _subtask; }
+
+apt_install(){ _status "debian: install"
+  _chroot_ $ROOTFS apt-get install             \
+    -y --no-install-recommends                 \
+    consolekit dbus                            \
+    usbutils pciutils apt-utils                \
+    net-tools wireless-tools openssh-server    \
+    bzip2 unrar lzma zip gzip                  \
+    man tmux vim sudo wget curl pv htop        \
+    i3 slim xinit suckless-tools               \
+    xserver-xorg-input-all xserver-xorg-video-all \
+    2>&1 | _subtask; }
+
+new_main
+
+return
+if mkdir -p /run/install && query_install
+then (
+  [ -z "$ROOTFS" ]      && return 1
+  bootstrap_mounts && do_install
+) >/run/install/log 2>&1 & fi

@@ -1,0 +1,76 @@
+#!/bin/sh
+
+export DESTARCH_COMMON=arm
+export DESTARCH_DEBIAN=armhf
+export DESTARCH_MULTI=arm-linux-gnueabihf
+export FIRMWARE=$SOURCES/firmware
+
+debroot_armhf_pi(){ # older pi's need teh raspian
+  export DEBIAN_REPO=http://archive.raspbian.org/raspbian; }
+
+linux_setup_armhf(){
+  export KERNEL_MODULES=$FIRMWARE/modules/$KERNEL_VERSION;
+  [ -n "$PRODUCT" ] && {
+    mkdir -p $SOURCES/$PRODUCT/
+  }; }
+
+linux_setup_armhf_pi(){
+  export USERLAND=$FIRMWARE/opt
+  export KERNEL_FORMAT=blob
+  export KERNEL=kernel
+  export KERNEL_IMAGE=$FIRMWARE/boot/$KERNEL.img
+  export KERNEL_VERSION=$(ls $FIRMWARE/modules | grep -v v7);
+  linux_setup_armhf; }
+
+linux_setup_armhf_pi2(){
+  export USERLAND=$FIRMWARE/hardfp/opt
+  export KERNEL_FORMAT=blob
+  export KERNEL=kernel7
+  export KERNEL_IMAGE=$FIRMWARE/boot/$KERNEL.img
+  export KERNEL_VERSION=$(ls $FIRMWARE/modules | grep v7);
+  linux_setup_armhf; }
+
+linux_deps_armhf_pi2(){ linux_deps_armhf_pi; }
+linux_deps_armhf_pi(){
+  _git_source firmware https://github.com/raspberrypi/firmware; }
+linux_deps_armhf_bpro(){
+  _git_source firmware https://github.com/raspberrypi/firmware; }
+
+crossinit_armhf(){
+  _depend_apt_host qemu-debootstrap
+  _depend_apt_host qemu-system-arm
+  _depend_apt_host qemu-arm-static qemu-user-static
+  _depend_http linux-emu "$KERNEL_EMU_URL"
+  __exec_armhf(){
+    [ -f $1/bin/qemu-arm-static ] || cp $(which qemu-arm-static) $1/bin/
+    chroot $1 /bin/qemu-arm-static /bin/sh -c "$2"; }; }
+
+pack_armhf(){
+  rm -f $DESTDIR/bin/qemu-arm-static;
+  ln -s . $DESTDIR/lib/arm-linux-gnueabihf; }
+
+stick_armhf(){
+  local mount=$BWD/mnt
+  [ -z "$DEVICE" ] && return 0
+  [ -d $SOURCES/bootfs -a -f $SOURCES/gearos.img ] || { echo ERROR: $SOURCES/bootfs or gearos.img missing; return 1; }
+  # copy kernel and firmware
+  mkdir -p $mount
+  mkfs.msdos ${DEVICE}1                             || return 1
+  mount      ${DEVICE}1            $mount           &&
+  cp         $SOURCES/initramfs.gz $mount/initrd.gz &&
+  cp -rv     $SOURCES/bootfs/*     $mount/          &&
+  printf "
+hdmi_drive=2
+hdmi_group=2
+hdmi_mode=82
+gpu_mem=448
+disable_splash=1
+boot_delay=0
+boot_delay_ms=100
+initramfs initrd.gz followkernel
+">$mount/config.txt &&
+  printf "init=/bin/sh root=/dev/ram0 rootwait rw
+">$mount/cmdline.txt; result=$?
+  umount $mount; rm -rf $mount
+  [ $result -eq 0 ] &&
+  pv $SOURCES/gearos.img >${DEVICE}2 | tr "\x1b" "\n"; }

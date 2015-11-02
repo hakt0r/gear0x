@@ -1,0 +1,9 @@
+#!/bin/sh
+{ ls $TARGET/*.iso >/dev/null 2>&1 || ls $TARGET/*.img >/dev/null 2>&1 || return 0
+  mkdir -p /run/images
+  ls $TARGET/*.iso >/dev/null 2>&1 && ln -sf $TARGET/*.iso /run/images/
+  ls $TARGET/*.img >/dev/null 2>&1 && ln -sf $TARGET/*.img /run/images/
+  [ -f $TARGET/linux.img ] && losetup -f $TARGET/linux.img
+  local clr=$(printf '\x1b[0m') grn=$(printf '\x1b[1;42;37m')
+  usplash -i boot:iso -t " $grn install [iso image]               $clr"  -a "install-iso"
+  return 1; }

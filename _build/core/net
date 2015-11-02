@@ -1,19 +1,19 @@
 #!/bin/sh
-build(){
+
+deps(){
   _depend_apt_lib libc6
   _depend_apt_lib libnss3
-  _depend_apt brctl bridge-utils 
+  _depend_apt brctl bridge-utils
   _depend_apt iw
   _depend_apt iwconfig wireless-tools
   _depend_apt wpa_supplicant wpasupplicant
-  _depend_apt hostapd; 
+  _depend_apt hostapd;
   true; }
 
-install(){ # (: install networking :) - optimize take only what we need
+ramfs(){ local DESTDIR=$RAMFS
   echo gear >"$DESTDIR/etc/hostname"
   for l in libnss_files.so libnss_dns.so libnss3.so libnss_compat.so libnssutil3.so libresolv.so
   do _steal_lib $l; done
-  rm -f "$DESTDIR/bin/brctl"
   _steal_app \
     brctl iw iwevent iwspy iwpriv iwgetid iwconfig iwlist  \
     wpa_action wpa_passphrase wpa_supplicant wpa_cli \

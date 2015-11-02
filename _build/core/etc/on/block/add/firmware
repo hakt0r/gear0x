@@ -1,0 +1,8 @@
+#!/bin/sh
+{ [ -d "$TARGET/lib/modules/$(uname -r)" ] || return 0
+  touch $RUNDIR/firmware
+  mkdir -p /lib/firmware /lib/modules/$(uname -r)
+  mount -o bind $TARGET/lib/firmware            /lib/firmware
+  mount -o bind $TARGET/lib/modules/$(uname -r) /lib/modules/$(uname -r);
+  usplash -i fw -t "fw[$(uname -a)]" -a ":"
+  ugear hotplug; return 1; }

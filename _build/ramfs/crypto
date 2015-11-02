@@ -1,9 +1,0 @@
-#!/bin/sh
-
-build(){
-  _depend_apt lsblk util-linux
-  _depend_apt dmsetup
-  _depend_apt cryptsetup; }
-
-install(){
-  _steal_app cryptsetup dmsetup lsblk; }

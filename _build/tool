@@ -37,101 +37,23 @@ _help(){ printf "
 
 "; }
 
-_version(){
-  export RELEASE=$(cat $BUILD/release 2>/dev/null || printf experiment)
-  export VERSION=$(cat $BUILD/version 2>/dev/null || printf 0xDEADBEEF); }
-
-_require(){
-  depend(){ DEPEND=$(echo "$@"|awk -vd="$mod/" -vORS=' ' -vRS=' ' '
-    BEGIN{IRS=" \n\t"}{gsub(/@/,d);print $1}'); }
-
-  # run a hook inside package source
-  __hook(){ local hook="$1"; shift
-    if _exists $hook
-    then {
-      $hook "$@"; [ $? -eq 0 ] &&
-      printf "[\e[32m$hook\e[0m]" >&2 ||
-    { printf "[\e[31m$hook\e[0m]" >&2; return $?; }; } | _dots ""
-    else return 0; fi; }
-
-  # teh actual require
-  __load(){
-    local target="$1" lib=$(readlink -f "$BUILD/$2")
-    local name=$(basename "$lib")
-    local d= DEPEND= dir= dname=
-
-    [ -d "$lib" ] && lib="$lib/$name"
-    [ -n "$lib" ]      || return 0 # if $lib or $target dont exist
-    [ -r "$lib" ]      || return 0 # assume positive outcome
-    [ -n "$target" ]   || return 0 # e.g. return 0
-
-    dir=$(dirname "$lib")
-    dname=$(basename "$dir")
-
-    printf "${_BPP}[\e[1;35m$name\e[0m]" >&2; [ -z "${_BPP}" ] && _BPP="\n" || local _BPP="${_BPP} "
-
-    for d in $target pre$target post$target; do unset $d; done # unset relephant environment
-    . $lib             || return 1 # source $lib for dependencies
-
-    DEPEND=$(echo $DEPEND)         # rewrap DEPEND
-    __hook pre$target  || return 1 # run pre$target hook
-
-    if [ "$target" = build -a "$dname" = "$name" ]
-    then                           # copy skel items (on build, if available)
-      for d in $(ls $BUILD/ramfs)
-      do if [ -d $BUILD/ramfs/$d -a -d $dir/$d ]
-        then cp -r $dir/$d $DESTDIR/ && printf "+\e[32m$d\e[0m" >&2 || { printf "+\e[31m$dir/$d[\e0m" >&2; return 1; }
-    fi;done;fi
-
-    if [ -n "$DEPEND" ]            # require dependencies
-    then for d in $DEPEND
-      do [ -n "$d" ] && {
-        __load $target $d || return 1; }
-    done; fi
-
-    for d in $target pre$target post$target; do unset $d; done # unset relephant environment
-    . $lib             || return 1 # source $lib AGAIN for hooks
-    __hook $target     || return 1 # run $target hook
-    __hook post$target || return 1; }
-
-  # dots for non-verbosity
-  $VERBOSE &&
-  _dots(){ stdbuf -i0 -o0 cat -; } ||
-  _dots(){ awk -vh=$1 -vc=$2 'BEGIN{if(!c)c=2;printf h}{if(i++%c==0)printf "#"}'; }
-
-  # accept multiple modules
-  local target=$1; shift
-  for mod in $@; do
-    [ -z "$mod" ]           && continue
-    __load "$target" "$mod" || return 1
-  done; }
-
-_make(){
-  [ -z "$PHASES" ] && local PHASES="build install image ramfs stick"
-  local n phase PKGS="core $DESTARCH_PKGS $@"
-  for phase in $PHASES
-  do printf "%b[%b]" "$n" "\x1b[1;4;36m$phase\x1b[0m"
-    _BPP="\n " _require $phase $PKGS || return 1
-     n="\n"
-  done; }
-
 _tool(){ local _loop_
   export BWD=$PWD BUILD=$PWD/_build HOSTARCH=$(uname -m)
   export BUSYBOX SOURCES DESTDIR SYSROOT DEVICE DESTARCH
   export DEBIAN DEBIAN_REPO
   [ -z "$DEBIAN_REPO" ] && DEBIAN_REPO="ftp://ftp.de.debian.org/debian/"
   [ -z "$VERBOSE" ] && VERBOSE=false
+  . $BUILD/lib                     # source _build/lib
   _version                         # read current $VERSION and $RELEASE
                                    # require busybox
   [ -x "$BUSYBOX" ] || BUSYBOX=$BWD/$HOSTARCH/busybox/busybox
   [ -x "$BUSYBOX" ] || BUSYBOX=$(which busybox 2>&1)
   [ -x "$BUSYBOX" ] || { echo ERROR: please provide BUSYBOX; return 1 ; }
-  . $BUILD/lib                     # source _build/lib
-  . $BUILD/arch/common             # source _build/arch/common
   _loop_=true; while $_loop_       # read early options
   do case "$1" in
     "-S") _select_device;     shift   ;;
     "-v") VERBOSE=true;       shift   ;;
+    "-P") PRODUCT="$2";       shift 2 ;;
     "-D") DEVICE="$2";        shift 2 ;;
     "-a") DESTARCH="$2";      shift 2 ;;
     "-p") PHASES=$(echo $2 | tr , ' '); shift 2 ;;
@@ -140,15 +62,16 @@ _tool(){ local _loop_
     *   ) _loop_=false;;
   esac; done
   [ -f _config ] && . _config      # determine DESTARCH
-  [ -z $DESTARCH ] && DESTARCH=$(uname -m)
-  [ -z $DESTARCH ] && { echo COULD NOT DETERMINE DESTARCH; return 1; }
-  _arch_include                    # include arch/$DESTARCH files
+  [ -z "$PRODUCT" ]  && PRODUCT=generic
+  [ -z "$DESTARCH" ] && DESTARCH=$(uname -m)
+  [ -z "$DESTARCH" ] && { echo COULD NOT DETERMINE DESTARCH; return 1; }
+  . $BUILD/arch/$DESTARCH/setup    # include arch/$DESTARCH files
   SOURCES=$BWD/$DESTARCH           # set DESTARCH-dependent variables
   DESTDIR=$SOURCES/stage
   DEBIAN=$SOURCES/debian
   SYSROOT=$SOURCES/sysroot
   mkdir -p $SOURCES $SYSROOT       # create $SOURCES (and dirs needed)
-  _arch_hook crossinit           # activate cross compiler (if needed)
+  _arch_hook crossinit             # activate cross compiler (if needed)
   _debroot                         # check for debroot
   _loop_=true; while $_loop_       # read late options
   do case "$1" in

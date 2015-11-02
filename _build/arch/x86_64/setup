@@ -1,0 +1,29 @@
+#!/bin/sh
+
+export DESTARCH_COMMON=x86_64
+export DESTARCH_DEBIAN=amd64
+export DESTARCH_MULTI=x86_64-linux-gnu
+export KERNEL_DEBS="http://kernel.ubuntu.com/~kernel-ppa/mainline/v4.3-rc6-unstable/"
+
+linux_deps_x86_64(){ [ -z "$SOURCES" ] && return
+  _depend_deb_from linux         "$KERNEL_DEBS" image   64 generic
+  _depend_deb_from linux-headers "$KERNEL_DEBS" headers 64 generic;
+  rm -rf "$SOURCES/linux/usr"; }
+
+linux_setup_x86_64(){
+  [ -d $SOURCES/linux ] || linux_deps_x86_64
+  export KERNEL_FORMAT=blob
+  export KERNEL=$(ls $SOURCES/linux/boot 2>/dev/null | grep vmlinuz)
+  export KERNEL_IMAGE=$SOURCES/linux/boot/$KERNEL
+  export KERNEL_VERSION=$(ls $SOURCES/linux/lib/modules 2>/dev/null)
+  export KERNEL_MODULES=$SOURCES/linux/lib/modules/$KERNEL_VERSION
+  [ -f $KERNEL_MODULES/modules.dep ] ||
+    $SOURCES/busybox depmod -b $SOURCES/linux $KERNEL_VERSION && _ok depmod; }
+
+linux_install_x86_64(){
+  [ -f $KERNEL_MODULES/modules.dep ] ||
+    $SOURCES/busybox depmod -b $SOURCES/linux $KERNEL_VERSION && _ok depmod
+  return; }
+
+ramfs(){ ln -s lib $RAMFS/lib64; }
+build(){ ln -s lib $DESTDIR/lib64; }

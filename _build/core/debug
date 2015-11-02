@@ -1,0 +1,15 @@
+#!/bin/sh
+
+deps(){
+  _depend_apt ldd libc-bin
+  _depend_apt strace; }
+
+ramfs(){ local DESTDIR=$RAMFS
+  echo "#!/bin/sh
+ldd /lib/* 2>&1 | grep 'not found' | sort | uniq | awk 'BEGIN{ORS=\" \"}{print \$1}'" \
+  > $DESTDIR/bin/debug_missing_libs
+  chmod a+x $DESTDIR/bin/debug_missing_libs
+  for l in libcom_err libnsl libnspr4 libplc4 libplds4
+  do _steal_lib $l; done
+  _exec_debroot 'cat $(which ldd)' | sed 's/#!.*bash/#!\/bin\/sh/' > $DESTDIR/bin/ldd
+  _steal_app ldconfig ldconfig.real strace; }

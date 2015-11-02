@@ -1,0 +1,28 @@
+#!/bin/sh
+
+deps(){
+  _arch_file_or_depend busybox busybox-static
+  _arch_file_or_steal  busybox $SOURCES/
+  _depend_apt tmux; }
+
+build(){
+  _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash; }
+
+ramfs(){ local DESTDIR=$RAMFS
+  _arch_file_or_steal busybox $DESTDIR/bin/
+  cp $SOURCES/usplash $DESTDIR/bin/
+  # install busybox
+  _exec_debroot "busybox --list" | awk \
+  -vreq="sh:mount:sysctl:touch:chvt:find:grep:cat" \
+  -vdst="$DESTDIR/bin/" \
+  -vsrc="$DESTDIR/bin/busybox" '
+  BEGIN{ ORS=","; l = split(req,r,":")+1; for(i=1;i<l;i++) require[r[i]]=1 }
+  { if ( require[$1] == 1 ) {
+      system("ln -f " src " " dst "/" $1)
+      printf("\e[32m%s\e[0m",$1) }
+    else printf("\e[31m%s\e[0m",$1);
+    print "" }' >&2
+  mkdir              -p $DESTDIR/lib/terminfo
+  cp -r /lib/terminfo/l $DESTDIR/lib/terminfo/
+  cp -r /lib/terminfo/x $DESTDIR/lib/terminfo/
+  _steal_app tmux bash; }

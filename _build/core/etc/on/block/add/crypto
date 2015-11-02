@@ -1,0 +1,7 @@
+#!/bin/sh
+{ cryptsetup isLuks /dev/$DEVICE || return 0
+  if [ -n "$(crypto_devs)" ]
+  then local title="boot encrypted: "$(crypto_shortdev|tr " " ","|head -c -1)
+       touch $RUNDIR/crypto
+       usplash -i crypto -t "$title" -a "ugear cryptomount"; return 1
+  else usplash -i crypto -d; fi; return 0; }

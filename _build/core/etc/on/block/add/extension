@@ -1,0 +1,5 @@
+#!/bin/sh
+
+{ [ -f "$TARGET/.gear/extension" ] || return 0
+  usplash -i boot -t " loading extension [$(cat $TARGET/.gear/extension)] " -a "df"
+  overlay_add "$TARGET"; return 1; }

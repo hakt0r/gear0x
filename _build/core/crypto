@@ -1,0 +1,10 @@
+#!/bin/sh
+
+build(){
+  _depend_apt lsblk util-linux
+  _depend_apt dmsetup
+  _depend_apt cryptsetup; }
+
+ramfs(){ local DESTDIR=$RAMFS
+  _steal_app cryptsetup dmsetup lsblk;
+  _steal_lib libpcap.so.2; }

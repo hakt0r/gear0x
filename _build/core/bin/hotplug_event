@@ -1,0 +1,2 @@
+#!/bin/sh
+. /lib/u/gear; hotplug_event "$@"
