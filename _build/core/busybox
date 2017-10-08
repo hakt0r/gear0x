@@ -6,11 +6,16 @@ deps(){
   _depend_apt tmux; }
 
 build(){
-  _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash; }
+  _debroot_compile $BUILD/src/udg.c     $SOURCES/udg;
+  _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash;
+  _debroot_compile $BUILD/src/taskd.c   $SOURCES/taskd; }
 
-ramfs(){ local DESTDIR=$RAMFS
+ramfs(){
+  local DESTDIR=$RAMFS
   _arch_file_or_steal busybox $DESTDIR/bin/
+  cp $SOURCES/udg     $DESTDIR/bin/
   cp $SOURCES/usplash $DESTDIR/bin/
+  cp $SOURCES/taskd   $DESTDIR/bin/
   # install busybox
   _exec_debroot "busybox --list" | awk \
   -vreq="sh:mount:sysctl:touch:chvt:find:grep:cat" \
@@ -19,9 +24,9 @@ ramfs(){ local DESTDIR=$RAMFS
   BEGIN{ ORS=","; l = split(req,r,":")+1; for(i=1;i<l;i++) require[r[i]]=1 }
   { if ( require[$1] == 1 ) {
       system("ln -f " src " " dst "/" $1)
-      printf("\e[32m%s\e[0m",$1) }
-    else printf("\e[31m%s\e[0m",$1);
-    print "" }' >&2
+      printf("\x1b[32m%s\x1b[0m",$1) }
+    # else printf("\x1b[31m%s\x1b[0m",$1);
+    }' >&2
   mkdir              -p $DESTDIR/lib/terminfo
   cp -r /lib/terminfo/l $DESTDIR/lib/terminfo/
   cp -r /lib/terminfo/x $DESTDIR/lib/terminfo/

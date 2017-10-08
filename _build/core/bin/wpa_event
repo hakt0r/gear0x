@@ -1,11 +1,14 @@
 #!/bin/sh
 interface=$1
 exec >>/run/net/$interface/log 2>&1
+. /lib/u/net
 case "$2" in
   CONNECTED)
+    _update_net_widget
     usplash -i wifi -t "$interface: $WPA_ID_STR" -a ''
     udhcpc -s /bin/dhcp_event -i $interface -p /run/net/$interface/dhcp.pid;;
   DISCONNECTED)
+    _update_net_widget
     usplash -i wifi -t "$interface: DISCONNECT" -a ''
     test -f /run/net/$interface/dhcp.pid && kill -9 $(cat /run/net/$interface/dhcp.pid);;
 esac

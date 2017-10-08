@@ -4,7 +4,14 @@ deps:
 	busybox sh _build/tool -p deps make
 ramfs:
 	busybox sh _build/tool -p ramfs make
+build:
+	busybox sh _build/tool -p build make
 rebuild:
+	busybox sh _build/tool make
+shell:
+	busybox sh _build/tool -d bash
+update:
+	busybox sh _build/tool -d 'apt update && apt upgrade -y'
 	busybox sh _build/tool make
 rebuild-debug:
 	busybox sh _build/tool -v make

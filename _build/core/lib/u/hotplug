@@ -33,10 +33,10 @@ hotplug(){
   } close(GREP) }' & }
 
 hotplug_event(){ exec >>/run/hotplug/$SUBSYSTEM.log 2>&1
+  echo "($SUBSYSTEM:$ACTION):$UNAME :: @$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"
   [ -z "$SUBSYSTEM" -o -z "$ACTION" ]      && return 1
   local hook= dir=/etc/on/$SUBSYSTEM/$ACTION RUNDIR=/run/$SUBSYSTEM/$DEVICE
   local UNAME=$(echo "@$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"|sed 's/^@\+//;s/@.*//')
-  echo "($SUBSYSTEM:$ACTION):$UNAME :: @$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"
   run_hook _${SUBSYSTEM}_${ACTION}_pre     || return 0
   for hook in $(ls $dir/* 2>/dev/null)
   do . $hook || return 0; done

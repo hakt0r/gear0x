@@ -1,28 +1,35 @@
 #!/bin/sh
 gear0xINIT(){ local B=/bin/busybox; exec 2>&1
-  export TERM=linux PATH=/bin HOME=/root LD_LIBRARY_PATH=/lib TMP=/run TMPDIR=/run
+  export LC_ALL=C LANG=C LC_CTYPE=UTF-8
+  export TERM=linux PATH=/usr/bin:/sbin:/bin HOME=/root LD_LIBRARY_PATH=/lib TMP=/run TMPDIR=/run
   export USPLASH_TTY=$($B tty) USPLASH_SOCK=/run/usplash OVERLAY=/run/.ramfs
   $B touch /test 2>/dev/null && $B rm /test || $B mount -o remount,rw /  # remount root if necessary
   $B --install -s /bin
   # start overlay
   modprobe overlay
-  mkdir -p /run
-  mount -t tmpfs tmpfs /run
+  mkdir -p /run /dev/ /sys /proc
+  mount -t tmpfs    tmpfs /run
   mkdir -p /run/.work /run/.upper /run/.ramfs /run/overlay
   mount -o bind / /run/.ramfs
   mount -toverlay -olowerdir=$OVERLAY,upperdir=/run/.upper,workdir=/run/.work overlay /run/overlay
   mount -o bind /run /run/overlay/run
-  exec /bin/usplash -me "INIT_MODULE=gear0xOVERLAY . /etc/rc" \
-    -H "$(printf "\e[1;44;33m gear$(cat /etc/version)/$(cat /etc/release) [ram]")" \
-    -F "$(printf "\e[1;44;34m gear$(cat /etc/version) a minimal hackable OS")"; }
+  # basemounts
+  mount -t devtmpfs null  /dev     2>/dev/null
+  mount -t sysfs    null  /sys     2>/dev/null
+  mount -t proc     null  /proc    2>/dev/null
+  # INIT_MODULE=gear0xSTART exec busybox switch_root -c /dev/console /run/overlay /bin/sh /etc/rc;
+  # exec /bin/taskd daemon /etc/rc.d
+  local header="$(printf "\e[1;44;33m gear$(cat /etc/version)/$(cat /etc/release) [ram]")"
+  local footer="$(printf "\e[1;44;34m gear$(cat /etc/version) a minimal hackable OS")"
+  exec usplash -me "usplash -S /run/overlay -t 'INIT_MODULE=gear0xSTART . /etc/rc'" -H "$header" -F "$footer"
+  exec sh; }
 
-gear0xOVERLAY(){
-  usplash -S /run/overlay -t 'INIT_MODULE=gear0xBASEMOUNTS . /etc/rc'; }
-
-gear0xBASEMOUNTS(){
-  mount -t devtmpfs null   $1/dev     2>/dev/null
-  mount -t sysfs    null   $1/sys     2>/dev/null
-  mount -t proc     null   $1/proc    2>/dev/null
+gear0xSTART(){
+  # basemounts
+  mount -t devtmpfs null  /dev     2>/dev/null
+  mount -t sysfs    null  /sys     2>/dev/null
+  mount -t proc     null  /proc    2>/dev/null
+  # verbosity
   sysctl -w kernel.printk="3 4 1 3" >/dev/null 2>&1
   ln    -sf /proc/mounts /etc/mtab
   stty  -F $USPLASH_TTY speed 115200   >/dev/null 2>&1
@@ -33,54 +40,66 @@ gear0xBASEMOUNTS(){
   ln -sf $1/proc/self/fd/0 $1/dev/stdin
   ln -sf $1/proc/self/fd/1 $1/dev/stdout
   ln -sf $1/proc/self/fd/2 $1/dev/stderr;
-  gear0xSTART || gear0xRESCUE;  }
-
-gear0xSTART(){
+  # colors
   local clr=$(printf '\x1b[0m')
   local yel=$(printf '\x1b[1;43;37m')
   local red=$(printf '\x1b[1;41;37m')
-  local grn=$(printf '\x1b[1;42;37m')
+  local grn=$(printf '\x1b[1;42;38m')
+  # load kmods
   local mod; for mod in virtio_input ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
     dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
     usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
     mmc_block fat vfat isofs md_mod thermal sd_mod sg efivars
   do modprobe $mod >/dev/null 2>&1
   done
+
   set_hostname
   hotplug
-  usplash -i boot         -t " $yel booting [ enter: rescue console ] $clr"  -a "INIT_MODULE=gear0xRESCUE . /etc/rc"
-  usplash -i boot:rescue  -t " $yel rescue console                    $clr"  -a "INIT_MODULE=gear0xRESCUE . /etc/rc"
-  usplash -i boot:crypto  -t " $grn crypto [ mount ]                  $clr"  -a "ugear cryptomount"
-  usplash -i boot:install -t " $grn install [ debootstrap ]           $clr"  -a "install-gear"
-  usplash -i boot:tmux    -t " $grn [ tmux/bash ]                     $clr"  -a "INIT_MODULE=gear0xTMUX . /etc/rc"
-  usplash -i boot:reboot  -t " $red                reboot             $clr"  -a "reboot -f"
-  usplash -i boot:halt    -t " $red                 halt              $clr"  -a "halt -f"
-  usplash -i net          -t "net[searching]"                                -a ":"
-  usplash -i fw           -t "fw[searching]"                                 -a ":"
-  usplash -i crypto       -t "crypto[searching]"                             -a "ugear cryptodetect"
-  gear0xRCS; }
 
-gear0xRCS(){
+  usplash -i aboot         -t " $yel booting $clr [ enter: rescue console ] "  -a "INIT_MODULE=gear0xUSPLASH_TO_RESCUE . /etc/rc"
+  usplash -i aboot:tmux    -t " $grn tmux    $clr [ bash ] "                   -a "openvt -sc 2 /bin/tmux"
+  usplash -i acrypto       -t " $grn crypto  $clr [ mount ] "                  -a "ugear cryptomount"
+  usplash -i ainstall      -t " $grn install $clr [ debootstrap ] "            -a "install-gear"
+  usplash -i zreboot       -t " $red reboot  $clr "                            -a "reboot -f"
+  usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"
+
+  usplash -l "start $yel dropbear $clr"
   early_dropbear
-  for lib in $(ls /etc/rc.d|sort) # run rc-scripts
-    do run_rc $lib; done
-  if [ $$ -eq 1 ]    # if we are still the init process, it's our responsibility
-  then gear0xRESCUE; fi; } # to spawn a shell. else the kernel would panic. (stupid :D)
 
-gear0xTMUX(){
-  export PS1='\x1b[1;37;43m $HOSTNAME \x1b[0m '
-  openvt -c 2 -sw /bin/tmux; chvt 1; }
+  usplash -l "start $yel rc.d $clr"
+  for lib in $(ls /etc/rc.d|sort) # run rc-scripts
+  do
+    usplash -l "start $yel rc.d/$lib $clr"
+    run_rc $lib
+  done
+
+  usplash -d aboot:tmux
+  usplash -i aboot -t " $grn tmux [ bash ] $clr "  -a "openvt -sc 2 /bin/tmux"
+  usplash -l "gear$(cat /etc/version)/$(cat /etc/release) $grn ready $clr"
+
+  read forever
+  if [ $$ -eq 1 ]    # if we are still the init process, it's our responsibility
+  then gear0xRESCUE; fi;
+} # to spawn a shell. else the kernel would panic. (stupid :D)
 
 gear0xRESCUE(){
-  usplash -q "export PS1='\x1b[1;37;43m RESUCE \x1b[0m ';
-    reset; clear; sh;
-    echo rebooting..........; reboot -f"; }
+  export OS_MODE=rescue
+  reset; clear;
+  setsid cttyhack sh -l
+  echo s > /proc/sysrq-trigger
+  echo u > /proc/sysrq-trigger
+  echo b > /proc/sysrq-trigger; }
+
+gear0xUSPLASH_TO_RESCUE(){
+  usplash -q "
+    INIT_MODULE=gear0xRESCUE . /etc/rc
+  " || setsid cttyhack sh -l; }
 
 early_dropbear(){ { local p=/run/net/dropbear
   usplash -i ssh -t " starting ssh debug console " -a 'killall -9 dropbearkey dropbear'
-  local pw=$(head -c /dev/random|awk '{print substr($1,1,8);}')
+  local pw=$(head -c 16 /dev/urandom|busybox od -x|awk '{print $2$3$4$5$6;}' | head -n1)
   echo root:$pw | chpasswd
-  usplash -i ssh:info "login: root passwd: $pw"
+  usplash -i ssh:info -t " login: root/$pw" -a 'echo change root pw'
   mkdir -p $p
   local key=$(
     dropbearkey -t ecdsa -s 521 -f $p/ecdsa_key 2>&1 |
@@ -88,7 +107,8 @@ early_dropbear(){ { local p=/run/net/dropbear
   /bin/dropbear -a -r $p/ecdsa_key \
     -E -P $p/pid \
     >$p/log 2>&1
-  usplash -i ssh -t ssh:$key -a ''; } & }
+  usplash -i ssh -t " ssh: $key " -a ''; } & }
 
 . /lib/u/gear
+
 [ -n "$INIT_MODULE" ] && { $INIT_MODULE >/dev/null 2>&1 & } || gear0xINIT

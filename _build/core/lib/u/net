@@ -13,13 +13,20 @@ set_hostname(){
   _update_net_widget; }
 
 _update_net_widget(){
-  usplash -i net -t "net["$(net_devs|tr "\n" ,|head -c -1)"]" -a ':'; }
+  local devs=""
+  for n in $(net_devs)
+  do
+    devs="$devs$n"
+    [ -f /run/net/$n/ip ] && devs="$devs[$(cat /run/net/$n/ip)]"
+    devs="$devs "
+  done
+  usplash -i net -t " net: $devs" -a ':'; }
 
 _net_add_default(){
   echo "$ACTION: $INTERFACE $EARLY"
-  usplash -i net:$INTERFACE -t "$INTERFACE [detected]" -a ':'
   _update_net_widget
   [ "$INTERFACE" = lo ]      && return 0
+  usplash -i net:$INTERFACE -t " $INTERFACE [detected]" -a ':'
   [ -d /run/net/$INTERFACE ] && return 0 ||
     mkdir -p /run/net/$INTERFACE
   { if iw dev $INTERFACE 2>/dev/null

@@ -114,25 +114,48 @@ _run_kvm(){ # (: test kernel / ramdisk / squashfs-image :)
   #   echo creating storage... >&2
   #   truncate -s 100M $SOURCES/release/storage.img
   #   mkfs.ext4 $SOURCES/release/storage.img; }
-  rm -f $SOURCES/release.img
-  mksquashfs $SOURCES/linux.img $SOURCES/release.img -noI -noD -noF
+  # rm -f $SOURCES/release.img
+  # mksquashfs $SOURCES/linux.img $SOURCES/${DESTARCH}.img $SOURCES/release.img -noI -noD -noF
   echo booting... >&2 # -usb -device usb-host,hostbus=1,hostaddr=5 \
   _arch_hook __qemu $x         \
-   -m 1024                     \
-   -kernel $KERNEL_EMU         \
-   -initrd $RAMFS.gz           \
-   -hda $SOURCES/release.img   \
-   -hdb $SOURCES/linux.img     \
-   -append "quiet root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a"; }
+    -hda $SOURCES/release.img \
+    -hdb $SOURCES/linux.img   \
+    -m 1024                     \
+    -kernel $KERNEL_EMU         \
+    -initrd $RAMFS.gz           \
+    -append "quiet root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a"; }
 
 # debian related
 
+_debroot_make(){
+  [ -x $src ] && {
+    local src="$1" dst="$2" name=$(basename $1) dstname=$(basename $2) sdir=$(dirname $1)
+    local sdirname=$(basename $sdir)
+    printf "[\e[32m%s\e[0m]" "$dstname" >&2
+    rm -rf $DEBIAN/tmp/$name
+    cp -r  $sdir $DEBIAN/tmp/$name
+    _exec_debroot "\
+      echo BUILDING $1 >&2
+      cd /tmp/$name;\
+      diet gcc -static -o $dstname $name\
+    " 2>&1 | _dots
+    cp $DEBIAN/tmp/$name/$dstname $dst; chmod a+x $dst;
+    rm -rf $DEBIAN/tmp/$sdirname; }; }
+
 _debroot_compile(){
-  local src="$1" dst="$2" name=$(basename $1) dstname=$(basename $2)
-  [ -x $dst ] || {
-    cp $src $DEBIAN/tmp/
-    _exec_debroot "cd /tmp; diet gcc -static -o $dstname $name"
-    cp $DEBIAN/tmp/$dstname $dst; chmod a+x $dst; }; }
+  [ -x $src ] && {
+    local src="$1" dst="$2" name=$(basename $1) dstname=$(basename $2) sdir=$(dirname $1)
+    local sdirname=$(basename $sdir)
+    printf "[\e[32m%s\e[0m]" "$dstname" >&2
+    rm -rf $DEBIAN/tmp/$name
+    cp -r  $sdir $DEBIAN/tmp/$name
+    _exec_debroot "\
+      echo BUILDING $1 >&2
+      cd /tmp/$name;\
+      diet gcc -static -o $dstname $name\
+    " 2>&1 | _dots
+    cp $DEBIAN/tmp/$name/$dstname $dst; chmod a+x $dst;
+    rm -rf $DEBIAN/tmp/$sdirname; }; }
 
 _deburl(){
   local URL="$1"; shift
@@ -226,7 +249,7 @@ _steal_kmod(){  local dest="$1"; shift
 _steal_kmods(){ local mod= dest="$1"; shift
   for mod in "$@"
   do _steal_kmod "$dest" "$mod"
-done; $(which depmod) -b "$dest" $KERNEL_VERSION;}
+  done; $(which depmod) -b "$dest" $KERNEL_VERSION; }
 
 _steal_app(){ ( local a=
   for a in $@;do

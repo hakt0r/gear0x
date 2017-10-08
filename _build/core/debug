@@ -1,6 +1,9 @@
 #!/bin/sh
 
 deps(){
+  _depend_apt gdb;
+  _depend_apt ncat nmap;
+  _depend_apt valgrind;
   _depend_apt ldd libc-bin
   _depend_apt strace; }
 
@@ -12,4 +15,7 @@ ldd /lib/* 2>&1 | grep 'not found' | sort | uniq | awk 'BEGIN{ORS=\" \"}{print \
   for l in libcom_err libnsl libnspr4 libplc4 libplds4
   do _steal_lib $l; done
   _exec_debroot 'cat $(which ldd)' | sed 's/#!.*bash/#!\/bin\/sh/' > $DESTDIR/bin/ldd
-  _steal_app ldconfig ldconfig.real strace; }
+  _steal_app ldconfig ldconfig.real strace lspci;
+  _steal_app nmap ncat valgrind valgrind.bin gdb;
+  cp -rvf $BUILD/src/usplash.dbg $DESTDIR/bin/;
+  cp -rvf $DEBIAN/usr/lib/valgrind $DESTDIR/lib/; }

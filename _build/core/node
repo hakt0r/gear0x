@@ -1,19 +1,32 @@
 #!/bin/sh
 
-build(){
-  ARCH=$(dpkg --print-architecture|sed 's/amd/x/')
-  FILE=node-v0.12.7-linux-${ARCH}.tar.gz
-  URL=https://nodejs.org/dist/v0.12.7/$FILE
-  test -f ./$FILE || {
-    echo fetch: $URL
-    $(which wget) $URL; }
-  ln -sf $FILE ./node.tar.gz; }
+deps(){
+  _depend_apt nodejs npm; }
 
-install(){ (
-  cd $DESTDIR;
-  printf "installing nodejs "
-  tar xzvf ../node.tar.gz | awk '{if(i++%30==0)printf "."}END{print " done"}'
-  cp -r node-v0.12.7-linux-x64/* ./
-  rm -rf node-v0.12.7-linux-x64
-  mkdir license/node; mv README.md LICENSE ChangeLog license/node/; )
-  _steal_libs $DESTDIR/bin/node; }
+install(){
+  _steal_app nodejs;
+  cp $DEBIAN/usr/bin/npm $DESTDIR/usr/bin
+  cp -r $DEBIAN/usr/lib/nodejs $DESTDIR/usr/lib/; }
+
+#
+# export NODE_VERSION="v6.2.1"
+#
+# build(){
+#   ARCH=$(dpkg --print-architecture|sed 's/amd/x/')
+#   FILE="node-${NODE_VERSION}-linux-${ARCH}.tar.gz"
+#   URL="https://nodejs.org/dist/v6.2.1/$FILE"
+#   test -f ./$FILE || {
+#     echo fetch: $URL
+#     $(which wget) -4 $URL; }
+#   ln -sf $FILE ./node.tar.gz; }
+#
+# install(){ (
+#   ARCH=$(dpkg --print-architecture|sed 's/amd/x/')
+#   cd $DESTDIR;
+#   printf "installing nodejs to $DESTDIR\n" >&2
+#   tar xzvf "../node-${NODE_VERSION}-linux-${ARCH}.tar.gz" | awk '{if(i++%30==0)printf "."}END{print " done"}'
+#   cp -r node-${NODE_VERSION}-linux-${ARCH}/* ./
+#   rm -rf node-${NODE_VERSION}-linux-${ARCH}
+#   mkdir license/node; mv README.md LICENSE ChangeLog license/node/; )
+#   _steal_libs $DESTDIR/bin/node; }
+#

@@ -1,0 +1,20 @@
+#!/bin/sh
+
+ramfs(){ (
+  export HOME=$RAMFS/root
+  mkdir -p $HOME/.config/ozh/core
+  cd $HOME/.config/ozh/core
+  echo >&2
+  echo $RAMFS >&2
+  echo >&2
+  rm core
+  curl "https://raw.githubusercontent.com/hakt0r/ozh-core/master/core" > core
+  . ./core libs;
+  oz install +prefix @hakt0r core shell sys
+
+  { busybox printf \
+    '%s\n%s\n' \
+    '. /lib/u/gear' \
+    'OZH_BOOT=true . ~/.config/ozh/core/core libs'
+  } >> $RAMFS/root/.profile
+); }

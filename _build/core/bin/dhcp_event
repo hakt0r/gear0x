@@ -1,9 +1,16 @@
 #!/bin/sh
 exec >>/run/net/$interface/log 2>&1
 echo $interface:dhcp: $@ $ip $subnet $broadcast $routers
+. /lib/u/net
 case "$1" in
   'bound')
-    usplash -i net:$interface -t "$interface: $ip" -a ''
+    mkdir -p  /run/net/$interface/dhcp
+    echo $ip >/run/net/$interface/ip
+    echo $ip >/run/net/$interface/dhcp/ip
+    echo $subnet >/run/net/$interface/dhcp/subnet
+    echo $broadcast >/run/net/$interface/dhcp/broadcast
+    _update_net_widget
+    usplash -i net:$interface -t " $interface: $ip" -a ''
     ifconfig $interface $ip $subnet $broadcast up
     test -z "$router" || {
       while route del default; do echo "del default gw"; done
