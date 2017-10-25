@@ -1,7 +1,7 @@
 #!/bin/sh
 { export RAMFS=$SOURCES/initramfs
 export EXTENSION=$DESTARCH
-depend @linux @busybox @crypto @dropbear @net $RAMFS_MODULES # @installer @debug @ozh @node
+depend @linux @busybox @crypto @dropbear @net $RAMFS_MODULES @installer # @debug @ozh @node
 
 deps(){
   _depend_apt_host mksquashfs squashfsutils
@@ -11,7 +11,7 @@ deps(){
 tests(){ _run_kvm -x >&2; }
 
 preramfs(){ local DESTDIR=$RAMFS
-  [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash
+  # [ -f $SOURCES/usplash ] || _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash
   rm -rf $DESTDIR $RAMFS.gz
   mkdir -p $DESTDIR;
   cp -rv $BUILD/core/*/  $DESTDIR/
@@ -22,10 +22,11 @@ ramfs(){ local DESTDIR=$RAMFS
   mkdir -p $DESTDIR/lib/modules/$KERNEL_VERSION
   cp -v $KERNEL_MODULES/modules.* $DESTDIR/lib/modules/$KERNEL_VERSION/  2>&1 | _dots
   # cp -rv $KERNEL_MODULES/* $DESTDIR/lib/modules/$KERNEL_VERSION/
-  cp -rv $DEBIAN/usr/lib/locale $DESTDIR/lib/ 2>&1 | _dots
+  cp -rfv $DEBIAN/usr/lib/locale  $DESTDIR/lib/ 2>&1 | _dots
+  cp -rfv $DEBIAN/sbin/ldconfig   $DESTDIR/bin/ 2>&1 | _dots
   ln -s / $DESTDIR/usr
   _steal_kmods $DESTDIR \
-    virtio virtio_ring virtio_net virtio_scsi virtio_blk virtio_pci virtio_input \
+    virtio virtio_ring virtio_net virtio_scsi virtio_blk virtio_pci virtio_input virtio_gpu \
     qxl ttm e1000 syscopyarea sysfillrect sysimgblt i2c_piix4 pcspkr \
     ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
     dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
@@ -45,14 +46,14 @@ postramfs(){ local DESTDIR=$RAMFS
   echo $DESTARCH >etc/arch
   mkdir -p $SOURCES/release
   ldconfig -r $DESTDIR -c etc/ld.so.conf        &&
-  cp -rv $SOURCES/busybox         ./bin/        &&
-  cp $SOURCES/usplash     bin/                  &&
+  #cp -rv $SOURCES/busybox         ./bin/        &&
+  #cp $SOURCES/usplash     bin/                  &&
   mknod -m 660 dev/console c 5 1                &&
   mknod -m 660 dev/loop0   b 7 0                &&
   mknod -m 660 dev/ram     b 1 0                &&
   ln -s /etc/rc ./init                          &&
   _steal_app openssl mkfs.ext4 fsck.ext2 \
-               fsck.ext4 sed tar ar switch_root &&
+        switch_root fsck.ext4 sed tar ar        &&
   bash -n                         ./etc/rc      &&
   chmod a+x                       ./etc/rc      &&
   chmod a+x                       ./bin/*       &&
@@ -91,12 +92,13 @@ preinstall(){
   _arch_hook install
   mkdir -p $DESTDIR/.gear
   ln -sf '.' $DESTDIR/usr
-  ln -sf '.' $DESTDIR/system
+  # ln -sf '.' $DESTDIR/system # ??wtf
   echo $EXTENSION > $DESTDIR/.gear/extension; }
 
-postinstall(){
+image(){
   # (: build squashfs-image :)
   printf "${_BPP}[\e[32mbuilding gearos/%s\e[0m] " $EXTENSION >&2
+  ldconfig -r $DESTDIR -c $DESTDIR/etc/ld.so.conf
   rm -f  $SOURCES/$EXTENSION.img
   ( cd $DESTDIR; mksquashfs ./ $SOURCES/$EXTENSION.img -all-root -comp xz; )
   printf "${_BPP}\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/$EXTENSION.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/$EXTENSION.img|cut -f1) >&2; }

@@ -1,8 +1,8 @@
 #!/bin/sh
-{ [ -f "$RUNDIR/firmware" ] && return 0
+{ [ -f "$RUNDIR/firmware"       ] && return 0
+  [ -f "$TARGET/.gear/firmware" ] || return 0
   touch $RUNDIR/firmware
-  mkdir -p /lib/firmware /lib/modules/$(uname -r)
-  mount -o bind $TARGET/lib/firmware            /lib/firmware
-  mount -o bind $TARGET/lib/modules/$(uname -r) /lib/modules/$(uname -r);
+  usplash -O "$TARGET";
   usplash -i fw -t " fw: $(busybox uname -mr)" -a ":"
-  ugear hotplug; return 1; }
+  ugear hotplug;
+  return 1; }

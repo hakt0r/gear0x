@@ -1,3 +1,34 @@
-mkdir /var
-ln -s /run /var/log
-ln -s /run /tmp
+
+ldconfig
+
+test -e /tmp     || ln -sf /run /tmp
+test -e /var     || ln -sf /run /var
+test -e /run/run || ln -sf /run /run/run
+
+# system dbus
+mkdir -p /run/dbus
+addgroup -S dbus
+adduser -HS dbus -G dbus
+dbus-daemon --config-file=/etc/dbus-1/system.conf
+
+# xorg
+modprobe virtio_input
+modprobe virtio_gpu
+ln -s /bin/Xorg /bin/X
+
+Xorg -nolisten tcp -retro vt9 :0 &
+
+( # xinit
+export DISPLAY=:0
+i=0; while ! xprop -root &> /dev/null
+  do sleep 0.1; i=$(( $i + 1 )); [ "$i" -gt 50 ] && exit 1
+done # x11 is ready
+feh --bg-fill /etc/i3/bg.png &
+i3 &
+# xterm -title "gear0x::xterm" &
+# xterm -title "gear0x::log" -e watch tail /run/log/Xorg.0.log &
+# xterm -title "gear0x::xinput" -e watch xinput &
+) >/run/log/xinit.log 2>&1 &
+
+usplash -ixinit -t" $red X11 $clr$grn i3::gear $clr " -a"chvt 1"
+usplash -rxinit

@@ -30,7 +30,7 @@ hotplug(){
   while((GREP|getline)>0){
     gsub(/\*/,".*",$2)
     madev($2,$3)
-  } close(GREP) }' & }
+  } close(GREP) }'; }
 
 hotplug_event(){ exec >>/run/hotplug/$SUBSYSTEM.log 2>&1
   echo "($SUBSYSTEM:$ACTION):$UNAME :: @$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"
@@ -43,12 +43,8 @@ hotplug_event(){ exec >>/run/hotplug/$SUBSYSTEM.log 2>&1
   run_hook _${SUBSYSTEM}_${ACTION}_default || return 0
   run_hook _${SUBSYSTEM}_${ACTION}_post    || return 0; }
 
-overlay_add(){
-  [ -z "$OVERLAY" ] && return 1
-  export OVERLAY=$OVERLAY,$1
-  mount -t overlay -o remount,lowerdir=$OVERLAY,upperdir=/run/.upper,workdir=/run/.work overlay /; }
-
 _block_add_pre(){
+  [ -f /run/installing ] && return 1
   [ -z "$DEVICE" ] && return 1
   export TARGET=$RUNDIR/mount
   mkdir -p $TARGET && mount /dev/$DEVICE $TARGET >/dev/null 2>&1; }

@@ -1,0 +1,47 @@
+#!/bin/sh
+
+export EXTENSION=$DESTARCH
+
+build(){ _depend_apt_lib \
+  xinput feh x11-utils \
+  consolekit dialog dbus \
+  usb-utils pci-utils apt-utils \
+  net-tools wireless-tools openssh-server \
+  bzip2 unrar unlzma zip gzip \
+  man tmux vim sudo wget curl pv htop ngrep iotop \
+  i3-wm suckless-tools dwb xinit xterm \
+  xserver-xorg-input-mouse  \
+  xserver-xorg-input-kbd    \
+  xserver-xorg-input-wacom  \
+  xserver-xorg-video-qxl    \
+  xserver-xorg-video-vesa   \
+  xserver-xorg-video-fbdev  \
+  xserver-xorg-video-intel  \
+  xserver-xorg-video-nouveau;
+  _arch_hook build_xorg; }
+
+install(){
+  _steal_app \
+    dbus-daemon dbus-run-session xprop \
+    xkbcomp xkbevd xkill xkbwatch xkbvleds xterm xinput \
+    dmenu i3 xinit Xorg pv htop lspci dwb ngrep iotop   \
+    feh;
+  for l in \
+   libudev.so.1 libselinux.so.1 libgcrypt.so.20 libdl.so.2 libpciaccess.so.0        \
+   libdrm.so.2 libpixman-1.so.0 libXfont.so.1 libXau.so.6 libxshmfence.so.1         \
+   libXdmcp.so.6 libaudit.so.1 librt.so.1 libresolv.so.2 libcap.so.2 libpcre.so.3   \
+   libpthread.so.0 libgpg-error.so.0 libfreetype.so.6 libbz2.so.1.0 libfontenc.so.1 \
+   libattr.so.1 libpng12.so.0 libz.so.1 libm.so.6 libgcc_s.so.1                     \
+   libXau.so.6 libXfont2.so.2 libcap-ng.so.0
+  do _steal_lib $l
+  done
+  ln -s run $DESTDIR/var
+  ln -s .   $DESTDIR/usr
+  mkdir -p $DESTDIR/etc $DESTDIR/lib $DESTDIR/share $DESTDIR/bin
+  rm -rf $DESTDIR/share/X11 $DESTDIR/share/fonts $DESTDIR/etc/X11 $DESTDIR/lib/xorg
+  cp -rfv $DEBIAN/etc/X11         $DESTDIR/etc/
+  cp -rfv $DEBIAN/usr/lib/xorg    $DESTDIR/lib/
+  cp -rfv $DEBIAN/usr/share/X11   $DESTDIR/share/
+  cp -rfv $DEBIAN/usr/share/fonts $DESTDIR/share/
+  cp -rfv $DEBIAN/sbin/ldconfig   $DESTDIR/bin/
+  _arch_hook install_xorg; }

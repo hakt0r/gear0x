@@ -16,7 +16,7 @@ run_target(){
   local lib=$1 && shift 2>/dev/null &&
   if [ -f "/etc/target.d/$lib" ]
   then
-    if [ $$ -ne 1 ]; then usplash -q "ugear run_target $@"; fi
+    if [ $$ -ne 1 ]; then usplash -q"ugear run_target $@"; fi
     . "/etc/target.d/$lib" "$@";
   fi; }
 

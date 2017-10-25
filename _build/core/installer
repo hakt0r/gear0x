@@ -20,7 +20,7 @@ deps(){
   _depend_apt ar binutils
   _depend_apt debootstrap; }
 
-ramfs(){ local DESTDIR=$RAMFS 
+ramfs(){ local DESTDIR=$RAMFS
   __patch(){ cat $1 | sed '
     s|/usr/share/debootstrap|/lib/debootstrap|g
     s|chmod +x|chmod a+x|g

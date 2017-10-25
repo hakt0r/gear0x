@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 _exists(){ type $1 2>&1 | grep -iq function; }
 _is_app(){ which $1 >/dev/null 2>&1; }
@@ -15,6 +15,17 @@ _version_increment(){
 _version(){
   export RELEASE=$(cat $BUILD/release 2>/dev/null || printf experiment)
   export VERSION=$(cat $BUILD/version 2>/dev/null || printf 0xDEADBEEF); }
+
+_make(){
+  [ -z "$PHASES" ] && local PHASES="deps build ramfs install image stick"
+  local n phase  PKGS=
+  test "x$*x" = "xx" && PKGS="core"
+  PKGS="$PKGS $DESTARCH_PKGS $@"
+  for phase in $PHASES
+  do printf "%bENTER PHASE %b:" "$n" "\x1b[1;4;36m$phase\x1b[0m" >&2
+    _BPP="\n " _require $phase $PKGS || return 1
+     n="\n"
+  done; echo; }
 
 _require(){
   depend(){ DEPEND=$(echo "$@"|awk -vd="$mod/" -vORS=' ' -vRS=' ' '
@@ -51,7 +62,7 @@ _require(){
     DEPEND=$(echo $DEPEND)         # rewrap DEPEND
     __hook pre$target  || return 1 # run pre$target hook
 
-    if [ "$target" = build -a "$dname" = "$name" ]
+    if [ "$target" = "build" -a "$dname" = "$name" ]
     then                           # copy skel items (on build, if available)
       for d in $(ls $BUILD/core)
       do if [ -d $BUILD/core/$d -a -d $dir/$d ]
@@ -81,17 +92,6 @@ _require(){
     __load "$target" "$mod" || return 1
   done; }
 
-_make(){
-  [ -z "$PHASES" ] && local PHASES="deps build ramfs install image stick"
-  local n phase  PKGS=
-  [ -z "$@" ] && PKGS="core"
-  PKGS="$PKGS $DESTARCH_PKGS $@"
-  for phase in $PHASES
-  do printf "%b[%b]" "$n" "\x1b[1;4;36m$phase\x1b[0m"
-    _BPP="\n " _require $phase $PKGS || return 1
-     n="\n"
-  done; }
-
 _git_source(){ local name="$1" url="$2"; shift 2
   [ -d "$SOURCES/$name" ] || git clone --depth=1 "$url" "$SOURCES/$name" "$@"; }
 
@@ -109,21 +109,28 @@ __qemu_default(){ kvm         \
 _run_kvm(){ # (: test kernel / ramdisk / squashfs-image :)
   local x='-nographic'
   local a='console=ttyS0'
-  [ ":$1:" = ":-x:" ] && { x="-vga qxl"; a=; }
-  # test -f $SOURCES/release/storage.img || { # (: create storage :)
-  #   echo creating storage... >&2
-  #   truncate -s 100M $SOURCES/release/storage.img
-  #   mkfs.ext4 $SOURCES/release/storage.img; }
+  [ ":$1:" = ":-x:" ] && { x="-vga virtio"; a=; }
+  test -f $SOURCES/storage.img || { # (: create storage :)
+    echo creating storage... >&2
+    qemu-img create -fraw -o size=2G $SOURCES/storage.img; }
   # rm -f $SOURCES/release.img
   # mksquashfs $SOURCES/linux.img $SOURCES/${DESTARCH}.img $SOURCES/release.img -noI -noD -noF
   echo booting... >&2 # -usb -device usb-host,hostbus=1,hostaddr=5 \
-  _arch_hook __qemu $x         \
-    -hda $SOURCES/release.img \
-    -hdb $SOURCES/linux.img   \
+  _arch_hook __qemu $x          \
+    -usb -usbdevice tablet      \
+    -drive format=raw,file=$SOURCES/storage.img \
+    -drive format=raw,file=$SOURCES/linux.img   \
+    -drive format=raw,file=$SOURCES/x86_64.img  \
     -m 1024                     \
     -kernel $KERNEL_EMU         \
     -initrd $RAMFS.gz           \
-    -append "quiet root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a"; }
+    -append "quiet root=/dev/ram0 rootfstype=tmpfs rw init=/etc/rc $a" &
+  #-device virtio-serial-pci \
+  #-device virtserialport,chardev=spicechannel0,name=com.redhat.spice.0 \
+  #-chardev spicevmc,id=spicechannel0,name=vdagent \
+  #-spice unix,addr=/tmp/vm_spice.socket,disable-ticketing \
+  #spicy --uri="spice+unix:///tmp/vm_spice.socket"
+}
 
 # debian related
 

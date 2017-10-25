@@ -1,0 +1,55 @@
+#!/bin/sh
+
+overlay_init(){
+  modprobe overlay
+  mkdir -p /run /dev/ /sys /proc
+  ln -s /run /tmp
+  mount -t tmpfs tmpfs /run
+  local RUNDIR=/run/block/ramfs
+  mkdir -p $RUNDIR/work $RUNDIR/upper $RUNDIR/overlay $RUNDIR/mount /run/log /run/overlay
+  mount -o bind / $RUNDIR/mount
+  mount -t overlay -o lowerdir=$RUNDIR/mount,upperdir=$RUNDIR/upper,workdir=$RUNDIR/work overlay $RUNDIR/overlay
+  mount -o bind /run $RUNDIR/overlay/run
+  mount -o bind /    $RUNDIR/overlay/$RUNDIR/mount
+  mount -o bind /    $RUNDIR/overlay/$RUNDIR/mount
+  touch $RUNDIR/mounted; }
+
+overlay_mount(){
+  local TARGET="$1"
+  local OVLDIR=/run/overlay
+  local OVERLAY=$(overlay_mounted):$TARGET
+  local RUNDIR=$(dirname  $TARGET)
+  local RUNDEV=$(basename $RUNDIR)
+  [ -f $RUNDIR/mounted ] && return 0; touch $RUNDIR/mounted
+  mkdir -p $RUNDIR/previous $RUNDIR/work $RUNDIR/upper $RUNDIR/overlay;
+  mount -o bind / $RUNDIR/previous
+  mount -t overlay -o lowerdir=$OVERLAY,upperdir=$RUNDIR/upper,workdir=$RUNDIR/work overlay $RUNDIR/overlay
+  awk 'function bind(target){ system("mount -o bind "target" '"$RUNDIR"'/overlay"target) }
+  !( $2 == "/" || $2 == "/proc" || $2 == "/sys" || $2 == "/dev" || $2 == "/dev/pts" ){ d[i++] = $2; }
+  END{ for(x=0;x<i;x++) bind(d[x]) }' /proc/mounts
+  overlay_basemounts $RUNDIR/overlay; }
+
+overlay_mount_post(){
+  RUNDIR=$(dirname  "$1")
+  umount $RUNDIR/overlay;
+  umount $RUNDIR/previous && rm -rf $RUNDIR/previous; }
+
+overlay_basemounts(){
+  # basemounts
+  mount -t proc     null   $1/proc    2>/dev/null
+  mount -t sysfs    null   $1/sys     2>/dev/null
+  mount -t devtmpfs null   $1/dev     2>/dev/null
+  mkdir -p                 $1/dev/pts 2>/dev/null
+  mount -t devpts   null   $1/dev/pts 2>/dev/null
+  ln -sf $1/proc/self/fd/0 $1/dev/stdin
+  ln -sf $1/proc/self/fd/1 $1/dev/stdout
+  ln -sf $1/proc/self/fd/2 $1/dev/stderr; }
+
+overlay_baseumounts(){
+  umount /proc
+  umount /dev/pts
+  umount /dev
+  umount /sys; }
+
+overlay_mounted(){
+  ls /run/block/*/mounted | sed 's/ed$//' | awk 'BEGIN{ getline; printf $1 }{ printf ":%s" $1 }'; }

@@ -1,5 +1,4 @@
 #!/bin/sh
-
 export DESTARCH_COMMON=x86_64
 export DESTARCH_DEBIAN=amd64
 export DESTARCH_MULTI=x86_64-linux-gnu

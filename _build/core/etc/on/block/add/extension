@@ -1,5 +1,10 @@
 #!/bin/sh
-
 { [ -f "$TARGET/.gear/extension" ] || return 0
-  usplash -i boot -t " loading extension [$(cat $TARGET/.gear/extension)] " -a "df"
-  overlay_add "$TARGET"; return 1; }
+  usplash -l "loading extension [$(cat $TARGET/.gear/extension)] "
+  usplash -O "$TARGET" -a '. /lib/u/gear
+    usplash -l "$(ls $TARGET/etc/rc.d|sort|tr '\n' ',')"
+    for lib in $(ls $TARGET/etc/rc.d|sort)
+    do usplash -l "start $yel rc.d/$lib $clr"''; run_rc $lib
+    done
+    usplash -l "extension: $(cat $TARGET/.gear/extension) loaded rc=$(ls $TARGET/etc/rc.d|sort|tr '\n' ',')"';
+  return 1; }
