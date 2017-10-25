@@ -102,7 +102,7 @@ IOHANDLER(td_closed){ TASK(t);
   UDBG("TASK FD_CLOSED fd=%i\n",e->fd); }
 
 IOHANDLER(td_child_closed){
-  UDBG("TASK CHILD_CLOSED pid=%i\n",IO_SIG_PID); }
+  UDBG("TASK CHILD_CLOSED pid=%i\n",IO_CHILD_PID); }
 
 IOHANDLER(td_log){ TASK(t);
   char buf[1024];

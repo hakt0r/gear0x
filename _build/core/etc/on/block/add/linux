@@ -1,0 +1,12 @@
+#!/bin/sh
+{ if [ -f "$TARGET/bin/systemd" ]
+  then usplash -i acboot \
+    -t " $grn boot $clr [ $(basename $(dirname $TARGET)) (linux/systemd) ] " \
+    -a ". /lib/u/overlay; overlay_basemounts $TARGET; usplash -q'exec /bin/switch_root /system /bin/systemd'"
+  return 1; fi
+  if [ -f "$TARGET/lib/systemd/systemd" ]
+  then usplash -i acboot \
+      -t " $grn boot $clr [ $(basename $(dirname $TARGET)) (linux/systemd) ] " \
+      -a ". /lib/u/overlay; overlay_basemounts $TARGET; usplash -q'exec /bin/switch_root /system /lib/systemd/systemd'"
+    return 1; fi
+  return 0; }

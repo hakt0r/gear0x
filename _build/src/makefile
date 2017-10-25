@@ -8,15 +8,15 @@ udg: build_clean
 	strip ./udg
 	du -h udg
 udg.dbg: build_clean
-	gcc -O0 -fbuiltin -g -std=c11 -o udg.dbg  udg.c -D_DEFAULT_SOURCE
+	gcc -O0 -fbuiltin -g -std=c11 -o udg.dbg udg.c -D_DEFAULT_SOURCE
 udg-valgrind: udg.dbg
 	DEBUG=true valgrind --tool=memcheck --log-file=valgrind.log -v \
   --track-fds=yes --track-origins=yes \
 	--leak-check=full --free-fill=be \
-	./udg.dbg -p "lol"
+	./udg.dbg -D -o CTRL_C -a 'ls' -p haha
   # --show-leak-kinds=all
 udg-nemiver: udg.dbg
-	DEBUG=true nemiver ./udg.dbg -p 'lol'
+	DEBUG=true nemiver ./udg.dbg -D -o CTRL_D -a 'killall udg' -p haha
 
 usplash: build_clean
 	#gcc -rdynamic -Os -std=c11 -o usplash usplash.c

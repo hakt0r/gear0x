@@ -1,172 +1,215 @@
 #!/bin/sh
+#                                ██ ███    ██ ███████ ████████  █████  ██      ██        ██████  ███████  █████  ██████
+#                                ██ ████   ██ ██         ██    ██   ██ ██      ██       ██       ██      ██   ██ ██   ██
+#                                ██ ██ ██  ██ ███████    ██    ███████ ██      ██ █████ ██   ███ █████   ███████ ██████
+#                                ██ ██  ██ ██      ██    ██    ██   ██ ██      ██       ██    ██ ██      ██   ██ ██   ██
+#                                ██ ██   ████ ███████    ██    ██   ██ ███████ ███████   ██████  ███████ ██   ██ ██   ██
+#                                                                                                debian+gear0x installer
+#
+# Copyright (C) 2015-2017  Sebastian Glaser ( anx@ulzq.de )
+#
+# This program is free software; you can redistribute it and/or modify it under the terms of the
+#   GNU General Public License
+# as published by the Free Software Foundation;
+# either version 3 of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+# without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program;
+# if not, write to the Free Software Foundation,
+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA";
+#
+#                                                                                   ██    ██ ████████ ██ ██      ███████
+#                                                                                   ██    ██    ██    ██ ██      ██
+#                                                                                   ██    ██    ██    ██ ██      ███████
+#                                                                                   ██    ██    ██    ██ ██           ██
+#                                                                                    ██████     ██    ██ ███████ ███████
 
-. /lib/u/gear
-ldconfig
-rm -f /system
+      _udg_(){ udg -D -o "CRTL_C" -a "$ABORT" -o "CTRL_B" -a "$BACK" "$@"; }
+      _opt_(){ echo $OPTION | grep -qI $1; }
+      _nko_(){ _opt_ k && return 1; _opt_ $1; }
+ _opt_bool_(){ _opt_ $1 && echo true || echo false; }
+   _chroot_(){ chroot "$@"; }
+     _fail_(){ echo $1 >&2; exit 1; }
+   _status_(){ usplash -i ainstall -t " $@"; echo $@; }
 
-export DEVICE= OPTION=   HOMEFS=    HOMEFSPW=
-export ROOTFS= ROOTFSPW= MASTERKEY= MASTERKEYFS=
-export ROOTPW= USERNAME= USERPW=
-export MIRROR= VERSION=
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export LD_LIBRARY_PATH=/lib/$(cat /etc/arch)
-export DEBIAN_FRONTEND=noninteractive
+_step_init_(){
+  export "STEP_FIRST_KEY"="${1}"
+  export "STEP_PREV_${1}"="${1}";
+  export "STEP_ACTION_${1}"="${2}";
+  export "STEP_LAST"="${1}"; }
 
-[ -z "$VERSION" ] && VERSION=sid
-[ -z "$MIRROR"  ] && MIRROR=http://ftp.de.debian.org/debian
+_step_(){
+  export "STEP_NEXT_${STEP_LAST}"="${1}";
+  export "STEP_PREV_${1}"="${STEP_LAST}";
+  export "STEP_ACTION_${1}"="${2}";
+  export "STEP_LAST"="${1}"; }
 
-ln -s /run /tmp
+_step_run_(){
+  local BACK='echo back > /run/step; return 1'
+  local ABORT='echo abort > /run/step; return 1'
+  local prv= fnc= key="${STEP_FIRST_KEY}"
+  while true; do
+    fnc=$(eval "echo \"\$STEP_ACTION_$key"\");
+    [ -z "$fnc" ] && { echo "_step_ empty fnc"; exit 1; }
+    rm -f /run/step
+    $fnc "install"
+    case "$([ -f /run/step ] && cat /run/step)" in
+ "abort") chvt 1; exit 0;;
+  "back") key="$STEP_FIRST_KEY";; # "$(eval "echo \"\$STEP_PREV_$key\"")";;
+       *) key="$(eval "echo \"\$STEP_NEXT_$key\"")"; [ -n "$key" ] || break;;
+    esac
+  done; true; }
 
-new_main(){ local SPARSE= dev=
-  # select_device -pl "Select SPARSE device [temp]" SPARSE; dev=$(basename $SPARSE)
-  # udg -H "Continue?" -y || return 1
-  export ISOURL=http://cdimage.debian.org/debian-cd/current-live/amd64/webboot/debian-live-8.2.0-amd64-standard.squashfs
-  wget -O $SPARSE.squash $ISOURL
-  if [ -f /run/block/$dev/mounted ];then
-    mkdir -p /run/block/$dev/mount
-    ls       /run/block/$dev/mount
-  fi
-  return; }
+_subtask_(){
+    while read line
+      do [ -n "$line" ] && {
+        line=$(echo $line|sed 's/I: Retrieving /get: /;s/I: //')
+        echo "$line" # >> /run/install/debootstrap.log
+        usplash -i ainstall -t " $1: $line"; }
+    done; usplash -d ainstall; }
 
-_chroot_(){
-  chroot "$@"; }
-
-_status(){
-  echo $@
-  usplash -i ainstall -t " $@"; }
-
-_subtask(){
-  while read line
-    do [ -n "$line" ] && {
-      line=$(echo $line|sed 's/I: Retrieving /get: /;s/I: //')
-      # echo "$line" >> /run/install/debootstrap.log
-      usplash -i ainstall -t " $1: $line"; }
-  done; usplash -d ainstall; }
-
-select_device(){
-  local data=$(udg -H "$(printf "\e[41;30m $2")" -s "$(
+_select_device_(){
+  local data=$(_udg_ -H "$(printf "\e[41;30m $2")" -s "$(
     lsblk "$1" | awk 'BEGIN{getline}{h[i++]=$1}END{for(o=0;o<i;o++)print h[o]}';
     echo /dev/null;
   )");
   export "$3"="$data"; }
 
-select_options(){
-  export OPTION=$(udg -H "$(printf "\e[41;30m Choose your venom")" -c '
+_get_input_(){
+  local data=$(_udg_ -H "$(printf "\e[41;30m $1")" -p);
+  export "$2"="$data"; }
+
+_confirmed_pw_(){
+  local pw1= pw2= q=$1
+  while [ -z "$pw1" -o ! "$pw1" = "$pw2" ]
+  do
+    pw1=$(_udg_ -H "$(printf "\e[41;30m Enter $q")" -P); [ -f "/run/step" ] && break
+    pw2=$(_udg_ -H "$(printf "\e[41;30m Confirm $q")" -P)
+  done
+  export "$2"="$pw1"; }
+
+#                                                                              ██████  ██    ██ ███████ ██████  ██    ██
+#                                                                             ██    ██ ██    ██ ██      ██   ██  ██  ██
+#                                                                             ██    ██ ██    ██ █████   ██████    ████
+#                                                                             ██ ▄▄ ██ ██    ██ ██      ██   ██    ██
+#                                                                              ██████   ██████  ███████ ██   ██    ██
+#                                                                                 ▀▀
+
+query_install(){
+  _step_init_ aa select_options
+  _step_ 'ba' 'format_devices'
+  _step_ 'bb' 'select_masterkey'
+  _step_ 'bc' 'select_rootfs'
+  _step_ 'bd' 'select_homefs'
+  _step_ 'ca' 'query_username'
+  _step_ 'cb' 'query_masterkey'
+  _step_ 'cc' 'query_rootfs_pw'
+  _step_ 'cd' 'query_homefs_pw'
+  _step_ 'ce' 'query_root_pw'
+  _step_ 'cf' 'query_user_pw'
+  _step_ 'zz' 'begin_installation_or_abort'
+  _step_run_; }
+
+select_options(){ export OPTION=$(_udg_ -H "$(printf "\e[41;30m Choose your venom")" -c '
 s  1 Encrypt /
+sf 1 Format
 h  1 Separate /home
-hf 1 Format
 hc 1 Encrypt
+hf 1 Format
 k  1 Use Masterkey
 kc 1 Create
 km 0 Mount from Device
 ks 0 Mount via SSH
 a  0 Advanced
-af 0 Format Disks
-'); }
+ap 0 Partition Disks
+av 0 Verbose Logging'); }
 
-get_input(){
-  local data=$(udg -H "$(printf "\e[41;30m $1")" -p);
-  export "$2"="$data"; }
+format_devices(){
+  while _opt_ ap
+  do _select_device_ -pl "[Partition] select device"    DEVICE
+     reset; fdisk $DEVICE; sync
+     _udg_ -H "$(printf "\e[41;30m  Done partitioning? $DEVICE")" -y && break
+  done; }
 
-confirmed_pw(){
-  local pw1= pw2= q=$1
-  while [ -z "$pw1" -o ! "$pw1" = "$pw2" ]
-  do
-    pw1=$(udg -H "$(printf "\e[41;30m Enter $q")" -P)
-    pw2=$(udg -H "$(printf "\e[41;30m Confirm $q")" -P)
-  done
-  export "$2"="$pw1"; }
+select_masterkey(){ _opt_ k  && _select_device_ -pl "Please select Masterkey" MASTERKEYFS; }
+   select_homefs(){ _opt_ h  && _select_device_ -pl "Please select /home" HOMEFS; }
+   select_rootfs(){             _select_device_ -pl "Please select /" ROOTFS; }
+  query_username(){             _get_input_         "Enter a username" USERNAME; }
+ query_masterkey(){ _opt_ k  && _confirmed_pw_      "Masterkey [$MASTERKEYFS]" MASTERKEY; }
+ query_rootfs_pw(){ _nko_ s  && _confirmed_pw_      "Password for [$ROOTFS]"  ROOTFSPW; }
+ query_homefs_pw(){ _nko_ hc && _confirmed_pw_      "Password for [$HOMEFS]"  HOMEFSPW; }
+   query_root_pw(){             _confirmed_pw_      "a ROOT password" ROOTPW; }
+   query_user_pw(){             _confirmed_pw_      "[${USERNAME}]'s password" USERPW; }
 
-_opt(){ echo $OPTION | grep -qI $1; }
-_qky(){ _opt k && return 1 || _opt $1 && return 0; }
-
-query_install(){
-  select_options OPTION
-
-  while _opt af
-  do select_device -pl " [format] select device"    DEVICE
-    reset
-    fdisk $DEVICE
-    sleep 1
-    udg -H "$(printf "\e[41;30m  Done formatting? $DEVICE")" -y && break
-  done
-
-  if _opt k; then
-  select_device -pl " Please select Masterkey"      MASTERKEYFS
-  fi
-  select_device -pl " Please select /"              ROOTFS
-  if _opt h; then
-  select_device -pl " Please select /home"          HOMEFS
-  fi
-  get_input      "Enter a USER name"                USERNAME
-  confirmed_pw   " Masterkey [$MASTERKEYFS]"        MASTERKEY
-  _qky s  && confirmed_pw "password for [$ROOTFS]"  ROOTFSPW
-  _qky hc && confirmed_pw "password for [$HOMEFS]"  HOMEFSPW
-  confirmed_pw   "a ROOT password"                  ROOTPW
-  confirmed_pw   "[${USERNAME}]'s password"         USERPW
-
-  udg -H "$(printf "\e[41;30m Begin installation?")" -y || exit 0
+begin_installation_or_abort(){
+  _udg_ -H "$(printf "\e[41;30m Begin installation?")" -y || _fail_ "Installation aborted."
   usplash -d acrypto
   usplash -i ainstala -t " Installing debian+gear$(cat /etc/version)/$(cat /etc/release) " -a:
-  touch /run/installing; true; }
+  touch /run/installing; }
+
+#                                                                  ██ ███    ██ ███████ ████████  █████  ██      ██
+#                                                                  ██ ████   ██ ██         ██    ██   ██ ██      ██
+#                                                                  ██ ██ ██  ██ ███████    ██    ███████ ██      ██
+#                                                                  ██ ██  ██ ██      ██    ██    ██   ██ ██      ██
+#                                                                  ██ ██   ████ ███████    ██    ██   ██ ███████ ███████
+
+_setup_fs_(){
+  local mountpoint= block="$1" mapdev="$2" dest="$3" pass="$4" create="$5" mkfs="$6"
+  _umount_ "$block"
+  _luks_format_; _luks_verify_; _luks_open_; _mkfs_; _mount_; }
+_umount_(){
+  cat /proc/mounts | grep "^$1 " | awk '{print $2}' | while read mountpoint
+  do umount -f "$mountpoint" || _fail_ "failed to unmount: $mountpoint ($1)"; done; }
+_luks_format_(){ if $create; then
+  _status_ "fs:$mapdev: create ($block:$(printf "%s" "$pass"|wc -c))"
+  printf "%s" "$pass" | cryptsetup -q luksFormat $block || _fail_ "fs:$mapdev:error: create"; fi; }
+_luks_verify_(){ if [ -n "$pass" ]; then
+  _status_ "fs:$mapdev: verify"
+  cryptsetup isLuks $block || _fail_ "fs:$mapdev:error: verify"; fi; }
+_luks_open_(){ if [ -n "$pass" ]; then
+  _status_ "fs:$mapdev: open"
+  printf "%s" "$pass" | cryptsetup luksOpen $block $mapdev || _fail_ "fs:$mapdev:error: onopen"; fi; }
+_mkfs_(){ if $mkfs; then
+  _status_ "fs:$mapdev: mkfs"
+  if [ -n "$pass" ]
+  then mkfs.ext4 /dev/mapper/$mapdev || _fail_ "fs:$mapdev:error: mkfs"
+  else mkfs.ext4              $block || _fail_ "fs:$mapdev:error: mkfs"
+  fi; fi; }
+_mount_(){
+  _status_ "fs: mkdir $mapdev $dest"; mkdir -p $dest                 || _fail_ "fs: $mapdev-error: mkdir $dest"
+  if [ -n "$pass" ]
+  then _status_ "fs:$mapdev: mount"; mount /dev/mapper/$mapdev $dest || _fail_ "fs: $mapdev-error: mount $mapdev $dest"
+  else _status_ "fs:$mapdev: mount"; mount $block              $dest || _fail_ "fs: $mapdev-error: mount $block $dest"
+  fi; mkdir -p $dest/.gearos; }
 
 bootstrap_mounts(){
-  _status 'beginning installation'
-  local create=$(_opt kc && echo true || echo false)
+  _status_ 'beginning installation'
+  local create=$(_opt_ kc && echo true || echo false)
   # MASTERKEY
-  if _opt k;  then
-  if $create; then
-  _status "fs: create masterkey"; printf "%s" "$MASTERKEY" | cryptsetup -q luksFormat $MASTERKEYFS    || { _status "fs: masterkey-error: create $MASTERKEYFS"; return 1; }
-  fi
-  _status "fs: verify masterkey"; cryptsetup isLuks $MASTERKEYFS                                      || { _status "fs: masterkey-error: verify $MASTERKEYFS"; return 1; }
-  _status "fs: open masterkey";   printf "%s" "$MASTERKEY" | cryptsetup luksOpen $MASTERKEYFS gearkey || { _status "fs: masterkey-error: onopen $MASTERKEYFS"; return 1; }
-  if $create; then
-  _status "fs: mkfs masterkey";  mkfs.ext4 /dev/mapper/gearkey                                        || return 1
-  fi
-  _status "fs: mkdir masterkey"; mkdir -p /boot/key01
-  _status "fs: mount masterkey"; mount /dev/mapper/gearkey /boot/key01                                || return 1
-  # MASTERKEY: GEAR
-  if $create; then
-  _opt s  && ROOTFSPW="$(openssl rand 4096)"
-  _opt hc && HOMEFSPW="$(openssl rand 4096)"
-  mkdir /boot/key01/.gearos
-  echo boot/key > /boot/key01/.gearos/mount
-  fi;fi
+  _opt_ k && {
+    _setup_fs_ "$MASTERKEYFS" gearkey /boot/key01 "$MASTERKEY" "$create" "$(_opt_bool_ kc)"
+    $create && {
+      mkdir /boot/key01/.gearos
+      echo boot/key > /boot/key01/.gearos/mount; }; }
   # ROOTFS
-  if _opt s; then
-  _status 'fs: format /'; printf "%s" "$ROOTFSPW" | cryptsetup luksFormat $ROOTFS         || return 1
-  _status 'fs: open /';   printf "%s" "$ROOTFSPW" | cryptsetup luksOpen   $ROOTFS system  || return 1
-  _opt s && printf "%s" "$ROOTFSPW" >/boot/key01/$(blk_uuid $ROOTFS)
-  ROOTFS=/dev/mapper/system
-  fi
-  _status 'fs: mkfs /';   mkfs.ext4 $ROOTFS                                               || return 1
-  _status 'fs: mkdir /';  mkdir -p /system;
-  _status 'fs: mount /';  mount $ROOTFS /system                                           || return 1
-  ### # ROOTFS: GEAR
-  ROOTFS=/system; mkdir -p $ROOTFS/.gearos
-  echo system             >$ROOTFS/.gearos/mount
-  echo debian:$VERSION    >$ROOTFS/.gearos/release
+  _opt_ s && _opt_ k && {
+    ROOTFSPW="$(openssl rand 4096)"
+    printf "%s" "$ROOTFSPW" >/boot/key01/$(blk_uuid $ROOTFS); }
+  _setup_fs_ "$ROOTFS" system /system "$ROOTFSPW" "$(_opt_bool_ sf)" "$(_opt_bool_ s)"
+  ROOTFS=/system; echo system >$ROOTFS/.gearos/mount; echo debian:$VERSION >$ROOTFS/.gearos/release
   # HOMEFS
-  if _opt h; then
-  if _opt hc; then
-  if _opt hf; then
-  _status 'fs: format /home'; printf "%s" "$HOMEFSPW" | cryptsetup luksFormat $HOMEFS         || return 1
-  fi
-  _status 'fs: open /home';   printf "%s" "$HOMEFSPW" | cryptsetup luksOpen $HOMEFS home      || return 1
-  _opt k && printf "%s" "$HOMEFSPW" >/boot/key01/$(blk_uuid $HOMEFS)
-  HOMEFS=/dev/mapper/home
-  fi
-  if _opt hf; then
-  _status 'fs: mkfs /home';   mkfs.ext4 $HOMEFS                                               || return 1
-  fi
-  _status 'fs: mkdir /home';  mkdir -p /system/home;
-  _status 'fs: mount /home';  mount $HOMEFS /system/home                                      || return 1
-  # HOMEFS: GEAR
-  HOMEFS=/system/home; mkdir $HOMEFS/.gearos
-  echo system/home          >$HOMEFS/.gearos/mount
-  fi; _status "ready to roll"; true; }
+  _opt_ h && {
+    _opt_ k && _opt_ hc && {
+      HOMEFSPW="$(openssl rand 4096)"
+      printf "%s" "$HOMEFSPW" >/boot/key01/$(blk_uuid $HOMEFS); }
+    _setup_fs_ "$HOMEFS" home /system/home "$HOMEFSPW" "$(_opt_bool_ hc)" "$(_opt_bool_ hf)"
+    HOMEFS=/system/home; echo system/home >$HOMEFS/.gearos/mount; }
+  _status_ "ready to roll"; true; }
 
 do_install(){
+  bootstrap_mounts      &&
   do_debootstrap        &&
   apt_init              &&
   apt_update            &&
@@ -179,20 +222,20 @@ do_install(){
       -t "$(printf " \x1b[1;31;42m boot installed system \x1b[0m ")" \
       -a "usplash -q'. /lib/u/gear; cryptomount_system; crypto_boot'"
     return 0;
-  } || { _status "install: failed"; return 1; }; }
+  } || { _status_ "install: failed"; return 1; }; }
 
-do_debootstrap(){ _status "apt: bootstrapping"
+do_debootstrap(){ _status_ "apt: bootstrapping"
   debootstrap --no-check-gpg --variant=minbase --arch=$(deb_arch) \
-    $VERSION $ROOTFS $MIRROR 2>&1 | _subtask deb; }
+    $VERSION $ROOTFS $MIRROR 2>&1 | _subtask_ deb; }
 
-set_user_and_password(){ _status "setting: user and password"
+set_user_and_password(){ _status_ "setting: user and password"
   printf "root:$ROOTPW\n" |
   _chroot_ $ROOTFS chpasswd
   _chroot_ $ROOTFS useradd -m -s "/bin/bash" $USERNAME
   printf "$USERNAME:$USERPW\n" |
   _chroot_ $ROOTFS chpasswd $USERNAME; }
 
-apt_init(){ _status "apt: init"
+apt_init(){ _status_ "apt: init"
 echo "\
 deb $MIRROR/ $VERSION main contrib non-free
 deb $MIRROR/ $VERSION-updates main contrib non-free
@@ -202,10 +245,10 @@ deb http://security.debian.org/ $VERSION/updates main
 echo 'Acquire::Languages "none";
 ' >$ROOTFS/etc/apt/apt.conf.d/99translations; }
 
-apt_update(){ _status "apt: update"
-  _chroot_ $ROOTFS apt-get update 2>&1 | _subtask apt; }
+apt_update(){ _status_ "apt: update"
+  _chroot_ $ROOTFS apt-get update 2>&1 | _subtask_ apt; }
 
-apt_install(){ _status "debian: install"
+apt_install(){ _status_ "debian: install"
   _chroot_ $ROOTFS apt-get install             \
     -y --no-install-recommends                 \
     systemd consolekit dbus                    \
@@ -215,30 +258,62 @@ apt_install(){ _status "debian: install"
     man tmux vim sudo wget curl pv htop        \
     i3 slim xinit suckless-tools               \
     xserver-xorg-input-all xserver-xorg-video-all \
-    2>&1 | _subtask apt; }
+    2>&1 | _subtask_ apt; }
 
-# new_main
-# return
+#                                                                                        ███    ███  █████  ██ ███    ██
+#                                                                                        ████  ████ ██   ██ ██ ████   ██
+#                                                                                        ██ ████ ██ ███████ ██ ██ ██  ██
+#                                                                                        ██  ██  ██ ██   ██ ██ ██  ██ ██
+#                                                                                        ██      ██ ██   ██ ██ ██   ████
+
+export DEVICE= OPTION=   HOMEFS=    HOMEFSPW=
+export ROOTFS= ROOTFSPW= MASTERKEY= MASTERKEYFS=
+export ROOTPW= USERNAME= USERPW=
+export MIRROR= VERSION=
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LD_LIBRARY_PATH=/lib/$(cat /etc/arch)
+export DEBIAN_FRONTEND=noninteractive
+
+[ -z "$VERSION" ] && VERSION=sid
+[ -z "$MIRROR"  ] && MIRROR=http://ftp.de.debian.org/debian
+[ -d /tmp       ] || ln -s /run /tmp
+
+. /lib/u/gear
+ldconfig
+rm -f /system
+
+test -f /bin/wget.bin || wget 2>&1 | greq -q \-T && {
+  mv /bin/wget /bin/wget.bin
+  printf '#!/bin/sh
+usplash -l "busybox wget -T10 $*"
+busybox wget -T10 $@
+' > /bin/wget; chmod a+x /bin/wget; }
 
 if mkdir -p /run/install && query_install
 then (
-sync
-printf "\e[32;1m% 12s\e[0m '%s'\n" DEVICE $DEVICE
-printf "\e[32;1m% 12s\e[0m '%s'\n" MASTERKEYFS $MASTERKEYFS
-printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTFS $ROOTFS
-printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTFSPW $ROOTFSPW
-printf "\e[32;1m% 12s\e[0m '%s'\n" HOMEFS $HOMEFS
-printf "\e[32;1m% 12s\e[0m '%s'\n" HOMEFSPW $HOMEFSPW
-printf "\e[32;1m% 12s\e[0m '%s'\n" USERNAME $USERNAME
-printf "\e[32;1m% 12s\e[0m '%s'\n" MASTERKEY $MASTERKEY
-printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTPW $ROOTPW
-printf "\e[32;1m% 12s\e[0m '%s'\n" USERPW $USERPW
-sleep 1
+  printf "\e[32;1m% 12s\e[0m '%s'\n" MASTERKEYFS "$MASTERKEYFS"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTFS "$ROOTFS"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" HOMEFS "$HOMEFS"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" HOMEFSPW "$(test -n "$HOMEFSPW" && echo "xxxxxxxxxx")"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTFSPW "$(test -n "$ROOTFSPW" && echo "xxxxxxxxxx")"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" USERPW "$(test -n "$USERPW" && echo "xxxxxxxxxx")"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTPW "$(test -n "$ROOTPW" && echo "xxxxxxxxxx")"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" MASTERKEY "$(test -n "$MASTERKEY" && echo "xxxxxxxxxx")"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" USERNAME "$USERNAME"
+  printf "\e[32;1m% 12s\e[0m '%s'\n" OPTION "$OPTION"
   [ -z "$ROOTFS" ] && return 1
-  bootstrap_mounts && do_install
+  do_install
 ) 2>&1 | while read line; do
   usplash -l "installer: $line"
   echo $line
 done & fi
+
+# change to usplash but keep openvt from killing subprocesses
 chvt 1
 wait
+
+#                     ██   ██  █████  ██████  ██████  ██    ██     ██   ██  █████   ██████ ██   ██ ██ ███    ██  ██████
+#                     ██   ██ ██   ██ ██   ██ ██   ██  ██  ██      ██   ██ ██   ██ ██      ██  ██  ██ ████   ██ ██
+#                     ███████ ███████ ██████  ██████    ████       ███████ ███████ ██      █████   ██ ██ ██  ██ ██   ███
+#                     ██   ██ ██   ██ ██      ██         ██        ██   ██ ██   ██ ██      ██  ██  ██ ██  ██ ██ ██    ██
+#                     ██   ██ ██   ██ ██      ██         ██        ██   ██ ██   ██  ██████ ██   ██ ██ ██   ████  ██████

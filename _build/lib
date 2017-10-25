@@ -53,6 +53,7 @@ _require(){
 
     dir=$(dirname "$lib")
     dname=$(basename "$dir")
+    mkdir -p $DESTDIR
 
     printf "${_BPP}[\e[1;35m$name\e[0m]" >&2; [ -z "${_BPP}" ] && _BPP="\n" || local _BPP="${_BPP} "
 
@@ -61,7 +62,6 @@ _require(){
 
     DEPEND=$(echo $DEPEND)         # rewrap DEPEND
     __hook pre$target  || return 1 # run pre$target hook
-
     if [ "$target" = "build" -a "$dname" = "$name" ]
     then                           # copy skel items (on build, if available)
       for d in $(ls $BUILD/core)

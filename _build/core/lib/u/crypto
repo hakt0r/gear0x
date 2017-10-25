@@ -78,9 +78,10 @@ cryptomount_system(){
     mount -o bind /$mnt /$dest/$mnt || { ok=false; break; }
   done; $ok || return 1
   for file in resolv.conf fstab hostname hosts
-    do cat /etc/$file />$dest/etc/$file 2>/dev/null
+    do cat /etc/$file >/$dest/etc/$file 2>/dev/null
   done;
-  rm -f /etc/mtab; ln -sf /proc/mounts /$dest/etc/mtab; }
+  rm -f /$dest/etc/mtab; ln -sf /proc/mounts /$dest/etc/mtab;
+  true; }
 
 cryptomount_postsystem(){ local dev= dest= boot=
   for dev in $(ls /run/crypto/*/postsystem_mount 2>/dev/null)

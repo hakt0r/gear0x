@@ -241,21 +241,39 @@ OPTIONS:\n\
 ";
   write(1,h,strlen(h)); }
 
-int main(int argc, char *argv[]){ voidFn MODULE = NULL; int c, option_index;
+umap* CUSTOM_EVENTS = NULL;
+IOHANDLER(udg_custom_event_close);
+IOHANDLER(udg_custom_event){
+  char* a = umap_get(CUSTOM_EVENTS,e->name); if ( !a ) return 1;
+  ULOG("custom event: name=%s ation=%s",e->name,a);
+  io_exec(a,udg_custom_event_close,0); }
+IOHANDLER(udg_custom_event_close){
+  ULOG("custom event close: pid=%i status=%i",IO_CHILD_PID,IO_CHILD_STATUS);
+  if ( IO_CHILD_STATUS > 0 ){ tty_atexit(); exit(0); }}
+
+int main(int argc, char *argv[]){
+  int c, option_index;
+  voidFn MODULE = NULL;
+  char *key_code = NULL, *action = NULL;
+  CUSTOM_EVENTS = umap_create();
   while(1){
     option_index = 0;
-    c = getopt_long (argc, argv, "hypPrmVe:L:R:H:F:v:c:s:d:i:t:a:q:S:", long_options, &option_index);
+    c = getopt_long (argc, argv, "a:c:DeF:hH:L:o:pPR:s:v:Vy", long_options, &option_index);
     #define _update_tile() TILE_COLS = MIN(utf8ansi_cols(TILE_LEFT),utf8ansi_cols(TILE_RIGHT))
     if (c == -1) break;
     switch (c){
+      case 'o': key_code = strdup(optarg); break;
+      case 'a': if ( key_code ){
+        umap_set(CUSTOM_EVENTS,key_code,strdup(optarg),free); key_code = NULL; }; break;
       case 'h': udg_help(); break;
-      case 'V': VERBOSE = true; break;
-      case 'v': DEFAULT      = strdup(optarg); break;
-      case 'e': PREEXEC      = strdup(optarg); break;
-      case 'H': TILE_HEADER  = strdup(optarg); break;
-      case 'F': TILE_FOOTER  = strdup(optarg); break;
-      case 'L': TILE_LEFT    = strdup(optarg); TILE_LEFT_BYTES  = strlen(optarg); _update_tile(); break;
-      case 'R': TILE_RIGHT   = strdup(optarg); TILE_RIGHT_BYTES = strlen(optarg); _update_tile(); break;
+      case 'V': VERBOSE         = true;           break;
+      case 'D': DEBUG = VERBOSE = true;           break;
+      case 'v': DEFAULT         = strdup(optarg); break;
+      case 'e': PREEXEC         = strdup(optarg); break;
+      case 'H': TILE_HEADER     = strdup(optarg); break;
+      case 'F': TILE_FOOTER     = strdup(optarg); break;
+      case 'L': TILE_LEFT       = strdup(optarg); TILE_LEFT_BYTES  = strlen(optarg); _update_tile(); break;
+      case 'R': TILE_RIGHT      = strdup(optarg); TILE_RIGHT_BYTES = strlen(optarg); _update_tile(); break;
       case 'c': MODULE = choose_init; OPTIONS = strdup(optarg); break;
       case 's': MODULE = select_init; OPTIONS = strdup(optarg); break;
       case 'p': MODULE = prompt_init; break;
@@ -267,4 +285,10 @@ int main(int argc, char *argv[]){ voidFn MODULE = NULL; int c, option_index;
   VIEW_init(); MODULE(); PRE_IO = RENDERER;
   if ( PREEXEC ) system( PREEXEC );
   UDBG("\e[33mIO\e[0m \x1b[33mMAIN\x1b[0m\n");
+  if ( CUSTOM_EVENTS->count != 0 ){
+    urec* r = CUSTOM_EVENTS->last;
+    for (size_t i = 0; i < CUSTOM_EVENTS->count; i++){
+      if (( r = r->next )){
+        ULOG("bind_script debug=%i evt='%s' action='%s'",DEBUG,r->key,r->value);
+        io_bind_event(r->key,udg_custom_event); }}}
   io_main(); }

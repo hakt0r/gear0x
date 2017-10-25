@@ -46,7 +46,7 @@ gear0xSTART(){
   usplash -i aboot         -t " $yel booting $clr [ enter: rescue console ] "  -a "INIT_MODULE=gear0xUSPLASH_TO_RESCUE . /etc/rc"
   usplash -i aboot:bash    -t " $grn bash    $clr [ plain ] "                  -a "openvt -sc 2 /bin/bash"
   usplash -i aboot:tmux    -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"
-  usplash -i acrypto       -t " $grn crypto  $clr [ mount ] "                  -a "openvt -sc 3 /bin/cryptomount"
+  usplash -i acrypto       -t " $grn crypto  $clr [ boot ] "                   -a "openvt -sc 3 /bin/cryptomount"
   usplash -i ainstall      -t " $grn install $clr [ debootstrap ] "            -a "openvt -sc 3 /bin/install-gear"
   usplash -i zreboot       -t " $red reboot  $clr "                            -a "reboot -f"
   usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"

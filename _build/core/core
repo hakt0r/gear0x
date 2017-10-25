@@ -53,7 +53,7 @@ postramfs(){ local DESTDIR=$RAMFS
   mknod -m 660 dev/ram     b 1 0                &&
   ln -s /etc/rc ./init                          &&
   _steal_app openssl mkfs.ext4 fsck.ext2 \
-        switch_root fsck.ext4 sed tar ar        &&
+         switch_root fsck.ext4 sed tar ar       &&
   bash -n                         ./etc/rc      &&
   chmod a+x                       ./etc/rc      &&
   chmod a+x                       ./bin/*       &&
@@ -64,9 +64,9 @@ stick(){
   [ -z "$DEVICE" ] && { echo no DEVICE:"'$DEVICE'"; return 0; }
   [ -w "$DEVICE" ] || { echo nw DEVICE:"'$DEVICE'"; return 1; }
   dd if=/dev/zero of=$DEVICE bs=1M count=1      &&
-  cat /usr/lib/syslinux/mbr/mbr.bin >$DEVICE    &&
+  cat /usr/lib/SYSLINUX/mbr.bin >$DEVICE        &&
   sudo parted -ms $DEVICE mktable msdos         &&
-  sudo parted -ms $DEVICE mkpart primary 1 500M &&
+  sudo parted -ms $DEVICE mkpart primary 1 200M &&
   sudo parted $DEVICE set 1 boot on             &&
   _arch_hook bootfs                             &&
   mkdir -p mnt                                  &&
@@ -91,8 +91,7 @@ bootloader_default(){ printf \
 preinstall(){
   _arch_hook install
   mkdir -p $DESTDIR/.gear
-  ln -sf '.' $DESTDIR/usr
-  # ln -sf '.' $DESTDIR/system # ??wtf
+  rm -f $DESTDIR/usr; ln -sf '.' $DESTDIR/usr
   echo $EXTENSION > $DESTDIR/.gear/extension; }
 
 image(){

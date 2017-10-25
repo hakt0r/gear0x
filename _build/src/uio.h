@@ -96,27 +96,28 @@ struct ioBind {
                                                                             ███████    ██    ██   ██    ██    ██  ██████
 */
 
-static       int IO_EPOLL       = 0;
-static       int IO_MAXEVENTS   = 23;
-static     umap* IO_EVENTMAP    = NULL;
-static     umap* IO_CHILD       = NULL;
-static     void* IO_CHILD_REF   = NULL;
-static       int IO_TIMERFD     = 0;
-static       int IO_SIGNALFD    = 0;
-static       int IO_SIG_PID     = 0;
-static    voidFn PRE_IO         = NULL;
-static ioEvent** IO_EVENTS      = NULL;
-static  ioEvent* IO_EVENT_COUNT = 0;
-static  ioEvent* IO_EVENT       = NULL;
-static  epEvent* IO_EPOLL_EVENT = NULL;
-static   ioEvent IO_CLOSE_EVENT = {0, NULL, NULL, NULL, false, NULL, NULL, NULL, NULL, NULL, "IO", "EPOLL:CLOSE", NULL, 8};
+static       int IO_EPOLL        = 0;
+static       int IO_MAXEVENTS    = 23;
+static     umap* IO_EVENTMAP     = NULL;
+static     umap* IO_CHILD        = NULL;
+static     void* IO_CHILD_REF    = NULL;
+static     void* IO_CHILD_STATUS = NULL;
+static       int IO_CHILD_PID    = 0;
+static       int IO_TIMERFD      = 0;
+static       int IO_SIGNALFD     = 0;
+static    voidFn PRE_IO          = NULL;
+static ioEvent** IO_EVENTS       = NULL;
+static  ioEvent* IO_EVENT_COUNT  = 0;
+static  ioEvent* IO_EVENT        = NULL;
+static  epEvent* IO_EPOLL_EVENT  = NULL;
+static   ioEvent IO_CLOSE_EVENT  = {0, NULL, NULL, NULL, false, NULL, NULL, NULL, NULL, NULL, "IO", "EPOLL:CLOSE", NULL, 8};
 
-static  sigset_t IO_SIGSET      = {};
-static       int IO_SIGMAP[]    = {SIGWINCH,SIGQUIT,SIGUSR1,SIGUSR2,SIGPIPE,SIGCHLD,-1};
-static     char* SIGNAME[]      = {"INVALID","SIGHUP","SIGINT","SIGQUIT","SIGILL","SIGTRAP","SIGABRT","SIGBUS","SIGFPE",
-                                   "SIGKILL","SIGUSR1","SIGSEGV","SIGUSR2","SIGPIPE","SIGALRM","SIGTERM","SIGSTKFLT",
-                                   "SIGCHLD","SIGCONT","SIGSTOP","SIGTSTP","SIGTTIN","SIGTTOU","SIGURG","SIGXCPU",
-                                   "SIGXFSZ","SIGVTALRM","SIGPROF","SIGWINCH","SIGPOLL","SIGPWR","SIGSYS",NULL};
+static  sigset_t IO_SIGSET       = {};
+static       int IO_SIGMAP[]     = {SIGWINCH,SIGQUIT,SIGUSR1,SIGUSR2,SIGPIPE,SIGCHLD,-1};
+static     char* SIGNAME[]       = {"INVALID","SIGHUP","SIGINT","SIGQUIT","SIGILL","SIGTRAP","SIGABRT","SIGBUS","SIGFPE",
+                                    "SIGKILL","SIGUSR1","SIGSEGV","SIGUSR2","SIGPIPE","SIGALRM","SIGTERM","SIGSTKFLT",
+                                    "SIGCHLD","SIGCONT","SIGSTOP","SIGTSTP","SIGTTIN","SIGTTOU","SIGURG","SIGXCPU",
+                                    "SIGXFSZ","SIGVTALRM","SIGPROF","SIGWINCH","SIGPOLL","SIGPWR","SIGSYS",NULL};
 
 static      char IO_SPARSE[1024];
 
@@ -231,7 +232,7 @@ IOHANDLER(io_emit){
   if ( !callback ) callback = (ioHandler) umap_get(IO_EVENTMAP,e->type);
   if ( VERBOSE )
     if      ( "IO"  == e->type ) { UDBG("\e[33mIO\e[0m EMIT \e[0m\e[1;32mIO\e[0m '%s' data=0x%llx callback=%llx\e[0m\n", e->name, (void*)e->data, callback); }
-    else if ( "SIG" == e->type ) { UDBG("\e[33mIO\e[0m EMIT \e[0m\e[1;32mSIG\e[0m name=%s sig=%i callback=%llx\e[0m\n", e->name, IO_SIG_PID, callback); }
+    else if ( "SIG" == e->type ) { UDBG("\e[33mIO\e[0m EMIT \e[0m\e[1;32mSIG\e[0m name=%s sig=%i callback=%llx\e[0m\n", e->name, IO_CHILD_PID, callback); }
     else if ( "KEY" == e->type ) { char *k = e->data; UDBG("\e[33mIO\e[0m EMIT \e[0m\e[1;32mKEY\e[0m '%s' 0x%02x%02x%02x%02x%02x%02x%02x%02x [%llx] \e[0m\n", e->name, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], callback); }
     else                         { UDBG("\e[33mIO\e[0m EMIT type=%s name=%s args=%llx\n", e->type, e->name, (void*)e->data ); }
   if ( !callback && VERBOSE ) { UVRB("ERROR IO EMIT fd=%i err=-1 No callback for: %s\n",e->fd,e->name); return -1; }
@@ -342,7 +343,7 @@ IOHANDLER(ioProcess_child_closed){
   ioProcess* p = (ioProcess*) IO_CHILD_REF;
   if ( p ) return ioProcess_free(p->in);
   else {
-    UDBG("ioProcess unknown child closed: %i\n",IO_SIG_PID);
+    UDBG("ioProcess unknown child closed: %i\n",IO_CHILD_PID);
     return -1; }}
 
 IOHANDLER(ioProcess_log){
@@ -378,8 +379,8 @@ void io_kill_recursive(pid_t pid, int s){
   io_exec(cmd,NULL,0); free(cmd); }
 
 IOHANDLER(io_kill_recursive_end){
-  UDBG("IO \e[33mWAIT_CHILD_RELEASE\e[0m pid=%lli\n",IO_SIG_PID);
-  io_wait_child_release(IO_SIG_PID);
+  UDBG("IO \e[33mWAIT_CHILD_RELEASE\e[0m pid=%lli\n",IO_CHILD_PID);
+  io_wait_child_release(IO_CHILD_PID);
   if (IO_CHILD_REF) free(IO_CHILD_REF);
   return 1; }
 
@@ -483,15 +484,16 @@ IOHANDLER(io_sigread){
     // UDBG("\e[33mIO\e[0m SIGNAL SIGCHILD\n");
     while ( 0 < ( pid = waitpid(-1, &status, WNOHANG))){
       UDBG("\e[33mIO\e[0m SIGNAL SIGCHILD pid=%i\n",pid);
-      IO_CHILD_REF = NULL;
-      IO_SIG_PID = pid;
+      IO_CHILD_REF    = NULL;
+      IO_CHILD_STATUS = status;
+      IO_CHILD_PID = pid;
       if ( a = umap_getI(IO_CHILD,pid) ){
         call = a->a; IO_CHILD_REF = a->b;
         if ( 1 != call(e)) io_emit(e); }
       else io_emit(e); }
     UDBG("\e[33mIO\e[0m SIGCHILD:DONE pid=%i\n",pid); }
   else {
-      IO_SIG_PID = sig;
+      IO_CHILD_PID = sig;
       io_emit(e); }
   goto TRY_READ; }
 
@@ -534,8 +536,11 @@ char* io_read_file_sync(char *path,int s){
     return strdup(d); }
   else return NULL; }
 
-void io_bind(ioBind map[]){ int i;
-  for ( i=0; map[i].name; i++ ) umap_set( IO_EVENTMAP, map[i].name, map[i].value, (free_f)NULL); }
+void io_bind_event(char *name, void *value){
+  umap_set( IO_EVENTMAP, name, value, (free_f)NULL); }
+
+void io_bind(ioBind map[]){
+  for ( int i=0; map[i].name; i++ ) umap_set( IO_EVENTMAP, map[i].name, map[i].value, (free_f)NULL); }
 
 int io_connect_unix_stream(char* socket_path){
   int fd, tries=0;
