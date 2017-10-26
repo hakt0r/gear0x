@@ -71,12 +71,12 @@ static       voidFn   RENDERER             = VIEW_render;
 static         bool   UC_DIRTY             = true;
 static         bool   UC_REFRESH           = true;
 static         bool   VIEW_SCROLL          = false;
-static unsigned int   RENDER_BUFFER_LENGTH = 1024 * 1024 * 16;
+static unsigned int   RENDER_BUFFER_LENGTH = 1024 * 1024 * 8;
 static         char **VIEW, *FILL_MENU, *RENDER_BUFFER, **ROW_BUF;
 static         uh32  *OUTLINE;
 static         uh32  *CURLINE;
 
-static               char *LOG[50];
+static               char *LOG[50], *LOG_FORMAT, *LOG_PAD;
 static                int  LOGLEN[50];
 static unsigned int const  LOG_MAX         = 50;
 static unsigned int        LOG_CUR         = 0x00;
@@ -101,10 +101,12 @@ void VIEW_init(void){
   size_t s = ROWS*sizeof(uh32);
   OUTLINE = malloc(s); memset(OUTLINE,0,s);
   CURLINE = malloc(s); memset(CURLINE,0,s);
+  LOG_FORMAT = malloc(COLS*3);
+  LOG_PAD    = malloc(COLS+2);
   for (size_t i = 0; i < ROWS; i++) {
     ROW_BUF[i] = (char*) malloc(COLS*3);
     ROW_BUF[i][0] = '\0'; }
-  VIEW = (char**) malloc(2*sizeof(char*));
+  VIEW = malloc(2*sizeof(char*));
   VIEW[0] = TILE_HEADER;
   VIEW[1] = TILE_FOOTER; }
 
@@ -137,7 +139,9 @@ void VIEW_resize(unsigned int size){
   int c = COLS; int r = ROWS; size = MAX(1,size); LAST_ROWS = ROWS;
   tty_readsize_kernel();
   // if ( size == VIEWLEN && c == COLS && r == ROWS ) return;
-  PAD_MENU_LENGTH = ( COLS - MENU_COLS ) / 2 + 1;
+  LOG_FORMAT = realloc(LOG_FORMAT,COLS*3);
+  LOG_PAD    = realloc(LOG_PAD,   COLS+2); memset(LOG_PAD,' ',COLS);
+  PAD_MENU_LENGTH = ( COLS - MENU_COLS ) / 2;
   FILL_MENU = realloc( FILL_MENU, MENU_COLS ); memset(FILL_MENU,' ',MENU_COLS);
   VIEW = realloc( VIEW, ( VIEWLEN = size ) * sizeof(char*) );
   // realloc rows
@@ -180,28 +184,35 @@ void VIEW_UPDATE_SCROLL(){ if ( VIEW_SCROLL ){
 
 void VIEW_render(){
   if ( is_writing ) { is_updated = 1; }
-
-  int log_len, log_pos, islog = 0x0, isview = 0x0, len, beg, end; char *row;
-  unsigned int i=0, j=0, pos=0, visibile_rows = MIN(MENU_ROWS,VIEWLEN);
-  unsigned int menuTop = MAX(0,  ( ROWS - visibile_rows ) / 2 );
-  unsigned int menuEnd = MAX(0, menuTop + visibile_rows ) + 1;
-  unsigned int log_lines_rendered = 0; char* log_line;
-
   VIEW_UPDATE_SCROLL();
 
+  int log_overflow = 0, log_pos, islog = 0x0, isview = 0x0, len, beg, end; char *row;
+  unsigned int i=0, j=0, pos=0, visibile_rows = MIN(MENU_ROWS,VIEWLEN);
+  // TOP/MID/BTM maybe
+  // unsigned int menuTop = MAX(0,  ( ROWS - visibile_rows ) / 2 );
+  // unsigned int menuEnd = MAX(0, menuTop + visibile_rows ) + 1;
+  unsigned int menuEnd = MAX(0,ROWS - 1);
+  unsigned int menuTop = MAX(0,ROWS - visibile_rows - 2);
+  unsigned int log_lines_rendered = 0; char* log_line;
+
   for( i = 0; i < ROWS; i++ ){
-    char *R = ROW_BUF[i]; pos = 0;
-    pos+= sprintf(R+pos,"\e[%i;1H\e[2K\e[0;31m",i);
-    // find logpos
-    log_pos  = ( LOG_CUR + LOG_MAX - log_lines_rendered ) % LOG_MAX;
-    log_len  = LOGLEN[log_pos];
+    bool format_log = false; char *R = ROW_BUF[i]; pos = 0;
+    log_pos  = ( LOG_CUR - 1 + LOG_MAX - log_lines_rendered ) % LOG_MAX;
     log_line = LOG[log_pos];
     islog    = log_lines_rendered < MIN( LOG_LENGTH + 2, MIN( LOG_MAX, ROWS ));
     isview   = menuTop <= i && i <= menuEnd;
+    _FORMAT_("\e[%i;1H\e[2K\e[0;31m",i+1);
+    if ( islog && log_line ) if ( (log_line[0] == '%') && (log_line[1] == 'c') ){
+      int len = utf8ansi_cols(log_line) - 2;
+      int off = MAX(0, (COLS-len)/2 );
+      if ( len < COLS ){
+        format_log = true;
+        sprintf(LOG_FORMAT,"%.*s%s",off,LOG_PAD,log_line+2);
+        log_line = LOG_FORMAT; }}
     if ( isview ){
       if ( islog && log_line ){
+        _RENDER_( log_line, utf8ansi_trunc(log_line, PAD_MENU_LENGTH )); }
       // RENDER LEFT TILE
-      _RENDER_( log_line, utf8ansi_trunc(log_line, PAD_MENU_LENGTH )); }
       _FORMAT_("\e[%iG\e[0K",PAD_MENU_LENGTH-3);
       _RENDER_("\e[0m",4);
       _RENDER_(TILE_LEFT,TILE_LEFT_BYTES);
@@ -219,16 +230,17 @@ void VIEW_render(){
       _RENDER_(TILE_RIGHT,TILE_RIGHT_BYTES);
       _RENDER_("\e[0;31m",7);
       if ( islog && log_line ) {
-       int crop = utf8ansi_trunc( log_line, PAD_MENU_LENGTH + TILE_COLS + TILE_COLS + MENU_COLS );
-       _RENDER_( log_line + crop, utf8ansi_trunc(log_line + crop, MAX(0,COLS-crop) )); }}
+        int crop = utf8ansi_trunc ( log_line, PAD_MENU_LENGTH + TILE_COLS + MENU_COLS );
+        int len  = utf8ansi_cols  ( log_line + crop );
+        //_FORMAT_("(i=%i s=%i c=%i c=%i l=%i d=%i o=%i:%ib)",format_log,PAD_MENU_LENGTH + TILE_COLS + MENU_COLS,COLS,crop,len,COLS-crop,utf8ansi_cols(log_line),strlen(log_line));
+        _RENDER_( log_line + crop, utf8ansi_trunc(log_line + crop, MAX(0,COLS-crop) )); }}
     else if ( islog && log_line ){
-      _RENDER_(log_line,utf8ansi_trunc(log_line,COLS)); }
+      _RENDER_(log_line,utf8ansi_trunc(log_line,COLS-1)); }
     if ( islog ) log_lines_rendered++;
     // RENDER WIDGETS
-    if ( i == 1 ) if ( WIDGET ){
-      int d = COLS - WIDGET_COLS + 1;
-      if ( utf8ansi_cols(R) > d ) pos = utf8ansi_trunc(R,d);
-      else _FORMAT_("\e[%iG\e[0K%s",d,WIDGET); }
+    if ( i == 0 ) if ( WIDGET ){
+      int d = COLS - WIDGET_COLS;
+      _FORMAT_("\e[K\e[%iG%s",d+1,WIDGET); }
     // TERMINATE AND HASH LINE
     R[pos] = 0; CURLINE[i] = UFNV32a(R); }
   // create renderbuffer

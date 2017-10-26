@@ -416,7 +416,14 @@ IOHANDLER(menu_widget){
   UC_DIRTY = true; }
 
 IOHANDLER(menu_log){
-  ULOG("%s",e->data); }
+  char *line = e->data, *next = str_next(e->data,'\n');
+  if ( line == next ) ULOG("%s",line);
+  else {
+    while ( line != next ){
+      ULOG("%s",line);
+      next = str_next(line = next,'\n'); }
+    ULOG("%s",line); }
+  return 0; }
 
 IOHANDLER(rescue_shell){
   char *args[] = {"sh",NULL};

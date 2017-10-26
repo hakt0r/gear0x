@@ -16,5 +16,6 @@ case "$1" in
       while route del default; do echo "del default gw"; done
       echo "add default gw: $router"
       route add default gw $router; }
-    test -z "$dns"    || echo nameserver $dns > /etc/resolv.conf;;
+    test -z "$dns" || echo nameserver $dns > /etc/resolv.conf;;
 esac
+uplink_check &

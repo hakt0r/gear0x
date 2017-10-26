@@ -13,14 +13,16 @@ set_hostname(){
   _update_net_widget; }
 
 _update_net_widget(){
-  local devs=""
+  local devs="" c=41
+  test -f /run/net/uplink && c=42
+  [ -z "$HOSTNAME" ] && HOSTNAME=$(hostname)
   for n in $(net_devs)
   do
     devs="$devs$n"
     [ -f /run/net/$n/ip ] && devs="$devs[$(cat /run/net/$n/ip)]"
     devs="$devs "
   done
-  usplash -i net -t " net: $devs" -a ':'; }
+  usplash -w zz_net -t "$(printf "\e[%i;30m @%s %s\e[0m" "$c" "$HOSTNAME" "$devs")"; }
 
 _net_add_default(){
   echo "$ACTION: $INTERFACE $EARLY"
@@ -38,3 +40,10 @@ _net_add_default(){
     sleep 0.2; wpa_cli -P /run/net/$INTERFACE/wpacli.pid -B -a /bin/wpa_event -i $INTERFACE -p /run/wpa_supplicant &
   else ifplugd -Ifr /bin/ifplug_event -i $INTERFACE
   fi; } >>/run/net/$INTERFACE/log 2>&1 </dev/null & }
+
+uplink_check(){
+  rm -f /run/net/uplink.ping /run/net/uplink.wget
+  ping -c1 -w1 8.8.8.8                  && touch /run/net/uplink.ping &
+  wget -T1 -sqO /dev/null www.google.de && touch /run/net/uplink.wget & wait
+  [ -f /run/net/uplink.ping -o -f /run/net/uplink.wget ] && touch /run/net/uplink || rm /run/net/uplink
+  _update_net_widget; }

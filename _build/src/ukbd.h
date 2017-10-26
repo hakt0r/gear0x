@@ -9,13 +9,9 @@
 typedef struct ioKey  { uint32_t code; char* name;  } ioKey;
 
 static ioKey IO_KEY_CODE[] = {
-  { 0x01, "CTRL_A" },
-  { 0x02, "CTRL_B" },
-  { 0x03, "CTRL_C" },
-  { 0x04, "CTRL_D" },
-  { 0x06, "CTRL_F" },
-  { 0x07, "CTRL_G" },
-  { 0x08, "CTRL_H" }, { 0x09, "TAB" },    { 0x13, "CTRL_S" },
+  { 0x01, "CTRL_A" }, { 0x02, "CTRL_B" }, { 0x03, "CTRL_C" },
+  { 0x04, "CTRL_D" }, { 0x06, "CTRL_F" }, { 0x07, "CTRL_G" },
+  { 0x08, "CTRL_H" }, { 0x09, "TAB" },    { 0x11, "CTRL_Q" }, { 0x13, "CTRL_S" },
   { 0x16, "CTRL_V" }, { 0x0d, "ENTER" },  { 0x20, "SPACE" },  { 0x7f, "BACKSPACE" },
   { 0x1b5b317e, "UNKNOWN" }, { 0x1b5b327e, "INSERT" }, { 0x1b5b337e, "DELETE" },
   { 0x1b5b347e, "UNKNOWN" }, { 0x1b5b357e, "PGUP"   }, { 0x1b5b367e, "PGDN" },

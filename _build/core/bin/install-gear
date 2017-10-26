@@ -26,7 +26,7 @@
 #                                                                                   ██    ██    ██    ██ ██           ██
 #                                                                                    ██████     ██    ██ ███████ ███████
 
-      _udg_(){ udg -D -o "CRTL_C" -a "$ABORT" -o "CTRL_B" -a "$BACK" "$@"; }
+      _udg_(){ udg -D -F "$HINT" -o "CTRL_Q" -a "$ABORT" -o "CTRL_B" -a "$BACK" "$@"; }
       _opt_(){ echo $OPTION | grep -qI $1; }
       _nko_(){ _opt_ k && return 1; _opt_ $1; }
  _opt_bool_(){ _opt_ $1 && echo true || echo false; }
@@ -47,6 +47,7 @@ _step_(){
   export "STEP_LAST"="${1}"; }
 
 _step_run_(){
+  local HINT="$(printf "\e[41;30m CTRL-B: Main Menu CTRL-Q: Abort")"
   local BACK='echo back > /run/step; return 1'
   local ABORT='echo abort > /run/step; return 1'
   local prv= fnc= key="${STEP_FIRST_KEY}"
@@ -157,14 +158,15 @@ begin_installation_or_abort(){
 
 _setup_fs_(){
   local mountpoint= block="$1" mapdev="$2" dest="$3" pass="$4" create="$5" mkfs="$6"
-  _umount_ "$block"
   _luks_format_; _luks_verify_; _luks_open_; _mkfs_; _mount_; }
 _umount_(){
   cat /proc/mounts | grep "^$1 " | awk '{print $2}' | while read mountpoint
-  do umount -f "$mountpoint" || _fail_ "failed to unmount: $mountpoint ($1)"; done; }
+  do _status_ "fs:$mapdev umount $block ($mountpoint)"
+     umount -f "$mountpoint" || _fail_ "failed to unmount: $mountpoint ($1)"
+  done; }
 _luks_format_(){ if $create; then
   _status_ "fs:$mapdev: create ($block:$(printf "%s" "$pass"|wc -c))"
-  printf "%s" "$pass" | cryptsetup -q luksFormat $block || _fail_ "fs:$mapdev:error: create"; fi; }
+  printf "%s" "$pass" | cryptsetup luksFormat $block || _fail_ "fs:$mapdev:error: create"; fi; }
 _luks_verify_(){ if [ -n "$pass" ]; then
   _status_ "fs:$mapdev: verify"
   cryptsetup isLuks $block || _fail_ "fs:$mapdev:error: verify"; fi; }
@@ -187,6 +189,9 @@ _mount_(){
 bootstrap_mounts(){
   _status_ 'beginning installation'
   local create=$(_opt_ kc && echo true || echo false)
+  [ -n "$MASTERKEYFS" ] && _umount_ "$MASTERKEYFS"
+  [ -n "$ROOTFS"      ] && _umount_ "$ROOTFS"
+  [ -n "$HOMEFS"      ] && _umount_ "$HOMEFS"
   # MASTERKEY
   _opt_ k && {
     _setup_fs_ "$MASTERKEYFS" gearkey /boot/key01 "$MASTERKEY" "$create" "$(_opt_bool_ kc)"
@@ -195,9 +200,11 @@ bootstrap_mounts(){
       echo boot/key > /boot/key01/.gearos/mount; }; }
   # ROOTFS
   _opt_ s && _opt_ k && {
+    _status_ "genpw:$mapdev:"
     ROOTFSPW="$(openssl rand 4096)"
+    _status_ "genpw:$mapdev:$(printf "%s" "$ROOTFSPW"|wc -c)"
     printf "%s" "$ROOTFSPW" >/boot/key01/$(blk_uuid $ROOTFS); }
-  _setup_fs_ "$ROOTFS" system /system "$ROOTFSPW" "$(_opt_bool_ sf)" "$(_opt_bool_ s)"
+  _setup_fs_ "$ROOTFS" system /system "$ROOTFSPW" "$(_opt_bool_ s)" true
   ROOTFS=/system; echo system >$ROOTFS/.gearos/mount; echo debian:$VERSION >$ROOTFS/.gearos/release
   # HOMEFS
   _opt_ h && {
