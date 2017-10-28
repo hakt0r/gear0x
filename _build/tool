@@ -40,7 +40,7 @@ _help(){ printf "
 _tool(){ local _loop_
   export BWD=$PWD BUILD=$PWD/_build HOSTARCH=$(uname -m)
   export BUSYBOX SOURCES DESTDIR SYSROOT DEVICE DESTARCH
-  export DEBIAN DEBIAN_REPO
+  export DEBIAN DEBIAN_REPO CONTRIB=$BWD/contrib
   [ -z "$DEBIAN_REPO" ] && DEBIAN_REPO="ftp://ftp.de.debian.org/debian/"
   [ -z "$VERBOSE" ] && VERBOSE=false
   . $BUILD/lib                     # source _build/lib

@@ -1,0 +1,16 @@
+#!/bin/sh
+
+deps(){
+  if [ -d $CONTRIB/usplash ]
+  then ( cd $CONTRIB/usplash; git pull; )
+  else git clone https://github.com/hakt0r/usplash $CONTRIB/usplash
+  fi; }
+
+build(){
+  _debroot_compile $CONTRIB/usplash/udg.c     $SOURCES/udg;
+  _debroot_compile $CONTRIB/usplash/usplash.c $SOURCES/usplash;
+  _debroot_compile $CONTRIB/usplash/taskd.c   $SOURCES/taskd; }
+
+ramfs(){ (
+  cd $SOURCES;
+  cp udg usplash taskd $RAMFS/bin/; ); }

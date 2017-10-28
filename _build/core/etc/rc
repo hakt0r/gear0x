@@ -49,7 +49,7 @@ gear0xINIT(){ local B=/bin/busybox; exec 2>&1
   local header="$(printf "\e[1;44;33m gear$(cat /etc/version)/$(cat /etc/release) [ram]")"
   local footer="$(printf "\e[1;44;34m gear$(cat /etc/version) a minimal hackable OS")"
   . /lib/u/overlay; ubasemounts
-  exec usplash -m \
+  exec /bin/usplash -m \
     -e 'INIT_MODULE=gear0xSTART . /etc/rc'\
     -H "$header" -F "$footer"; }
 

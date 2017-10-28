@@ -1,7 +1,7 @@
 #!/bin/sh
 { export RAMFS=$SOURCES/initramfs
 export EXTENSION=$DESTARCH
-depend @linux @busybox @crypto @dropbear @net $RAMFS_MODULES @installer # @debug @ozh @node
+depend @linux @busybox @usplash @crypto @dropbear @net $RAMFS_MODULES @installer # @debug @ozh @node
 
 deps(){
   _depend_apt_host mksquashfs squashfsutils

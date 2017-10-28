@@ -5,17 +5,9 @@ deps(){
   _arch_file_or_steal  busybox $SOURCES/
   _depend_apt tmux; }
 
-build(){
-  _debroot_compile $BUILD/src/udg.c     $SOURCES/udg;
-  _debroot_compile $BUILD/src/usplash.c $SOURCES/usplash;
-  _debroot_compile $BUILD/src/taskd.c   $SOURCES/taskd; }
-
 ramfs(){
   local DESTDIR=$RAMFS
   _arch_file_or_steal busybox $DESTDIR/bin/
-  cp $SOURCES/udg     $DESTDIR/bin/
-  cp $SOURCES/usplash $DESTDIR/bin/
-  cp $SOURCES/taskd   $DESTDIR/bin/
   # install busybox
   _exec_debroot "busybox --list" | awk \
   -vreq="sh:mount:sysctl:touch:chvt:find:grep:cat" \
@@ -30,4 +22,4 @@ ramfs(){
   mkdir              -p $DESTDIR/lib/terminfo
   cp -r /lib/terminfo/l $DESTDIR/lib/terminfo/
   cp -r /lib/terminfo/x $DESTDIR/lib/terminfo/
-  _steal_app tmux bash; }
+  _steal_app tmux bash htop; }
