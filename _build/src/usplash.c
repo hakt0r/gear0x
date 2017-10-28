@@ -355,32 +355,6 @@ IOHANDLER(switchroot){
   if (action) io_shell(action);
   return 0; }
 
-#include <libgen.h>
-IOHANDLER(switchoverlay){
-  char *dir, *target, *newroot, *action, *script;
-  struct stat st; struct statfs stfs; dev_t rootdev;
-  target = e->data;
-  action = str_next(target,'\n'); action = action == target ? NULL : action;
-  dir = strdup(target); dir = dirname(dir);
-  asprintf(&target, "%s/mount",  dir);
-  asprintf(&newroot,"%s/overlay",dir);
-  ULOG("switchoverlay target=%s root=%s script=%s",target,newroot,action);
-  if ( getpid() != 1 ){ ULOG("switchoverlay: we must be PID 1; newroot=%s script=%s",newroot,action); return -1; }
-  asprintf(&script,". /lib/u/overlay; overlay_mount '%s'",target); system(script); free(script); sync();
-  chdir(newroot);  stat("/", &st); rootdev = st.st_dev; stat(".", &st);
-  if ( st.st_dev == rootdev || getpid() != 1 ){
-    ULOG("switchroot: must be a mountpoint; newroot=%s script=%s",newroot,action); return -1; }
-  if (mount(".", "/", NULL, MS_MOVE, NULL)) {
-    ULOG("error moving root"); return -1; }
-  chroot("."); chdir("/"); ULOG("switchroot(%s) complete script=%s",newroot,action); sync();
-  tty_reopen();
-  // post
-  asprintf(&script,". /lib/u/overlay; overlay_mount_post '%s'",target); system(script); free(script);
-  ULOG("switchoverlay(%s) complete script=%s",newroot,action);
-  free(target); free(newroot); free(dir);
-  if (action) io_shell(action);
-  return 0; }
-
 /*
                                                                               ████████  ██████   ██████  ██      ███████
                                                                                  ██    ██    ██ ██    ██ ██      ██
@@ -425,9 +399,9 @@ IOHANDLER(menu_log){
     ULOG("%s",line); }
   return 0; }
 
-IOHANDLER(rescue_shell){
-  char *args[] = {"sh",NULL};
-  execvp("/bin/sh",args); }
+IOHANDLER(toggle_debug)   { VERBOSE = DEBUG = DEBUG? false:true; }
+IOHANDLER(toggle_verbose) { DEBUG = false; VERBOSE = VERBOSE? false:true; }
+IOHANDLER(rescue_shell)   { char *args[] = {"sh",NULL}; execvp("/bin/sh",args); }
 
 /*
                                                                                                 ██ ███    ██ ██ ████████
@@ -452,12 +426,9 @@ void menu_init(void){
   MENU_WIDGET = umap_create();
   MENU_VIEW_SELECTED = (char*)  malloc( 1024 * sizeof(char));
   ioBind map[] = {
-    {"CTRL_R",rescue_shell},
-    {"SIGWINCH",menu_resize},
-    {"SIGUSR1",rescue_shell},
-    {"log",menu_log},
-    {"widget",menu_widget},
-    {"switchroot",switchroot},{"switchoverlay",switchoverlay},
+    {"CTRL_Q",rescue_shell},{"CTRL_V",toggle_verbose},{"CTRL_D",toggle_debug},
+    {"SIGWINCH",menu_resize},{"SIGUSR1",rescue_shell},
+    {"log",menu_log},{"widget",menu_widget},{"switchroot",switchroot},
     {"UP",menu_up},{"PGUP",menu_home},{"HOME",menu_home},{"DOWN",menu_down},{"PGDN",menu_end},{"END",menu_end},
     {"LEFT",menu_left},{"RIGHT",menu_right},{"ENTER",menu_run_selected},
     {"set",menu_set},{"del",menu_del},{"end",menu_quit},{"run",menu_run},{0,0}};
@@ -483,7 +454,6 @@ static struct option long_options[] = {
    {"delete",     required_argument, 0, 'd'},
    {"quit",       optional_argument, 0, 'q'},
    {"switchroot", required_argument, 0, 'S'},
-   {"switchoverlay", required_argument, 0, 'O'},
    {"widget",     required_argument, 0, 'w'},
    {"log",        required_argument, 0, 'l'},
    {0,0,0,0}};
@@ -495,7 +465,7 @@ int main(int argc, char *argv[]){
   int c, idx;
   while(1){
     idx = 0;
-    c = getopt_long (argc, argv, ":a:Dd:e:F:GhH:Ii:kl:L:mO:q::r::R:S:t:UVw:", long_options, &idx);
+    c = getopt_long (argc, argv, ":a:Dd:e:F:GhH:Ii:kl:L:mq::r::R:S:t:UVw:", long_options, &idx);
     if (c == -1) break;
     switch (c){
       case 'h': usplash_help(NULL);                                                              exit(0);
@@ -521,7 +491,6 @@ int main(int argc, char *argv[]){
       case 'd': MOPT = "del";           MOPT_KEY = optarg;                                         break;
       case 'r': MOPT = "run";           MOPT_KEY = optarg;                                         break;
       case 'S': MOPT = "switchroot";    MOPT_KEY = MOPT_NEWROOT = optarg; MOPT_SWROOT = true;      break;
-      case 'O': MOPT = "switchoverlay"; MOPT_KEY = MOPT_NEWROOT = optarg; MOPT_SWROOT = true;      break;
       case '?': break; default: abort(); }}
   if ( !MOPT_DAEMON ) if ( !MOPT ) {
     usplash_help(NULL); exit(1); }

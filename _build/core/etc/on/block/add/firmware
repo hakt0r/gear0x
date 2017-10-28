@@ -2,7 +2,6 @@
 { [ -f "$RUNDIR/firmware"       ] && return 0
   [ -f "$TARGET/.gear/firmware" ] || return 0
   touch $RUNDIR/firmware
-  usplash -O "$TARGET";
+  overlay_queue "$TARGET"
   usplash -i fw -t " fw: $(busybox uname -mr)" -a ":"
-  ugear hotplug;
   return 1; }

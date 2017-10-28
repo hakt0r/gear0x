@@ -25,13 +25,10 @@ run_hook(){
   local hook="$1" && shift 2>/dev/null &&
   { $hook "$@"; return $?; } || return 0; }
 
-blk_uuid      (){ blkid $1 | sed '/ UUID/!d;s/.* UUID=.//;s/".*//;s/-//g'; }
-blk_byuuid    (){ blkid | awk -vs="$1" '{gsub(/UUID=/,"");gsub(/[-":]/,"")}(s==$2){print $1}'; }
+blk_uuid  (){ blkid $1 | sed '/ UUID/!d;s/.* UUID=.//;s/".*//;s/-//g'; }
+blk_byuuid(){ blkid | awk -vs="$1" '{gsub(/UUID=/,"");gsub(/[-":]/,"")}(s==$2){print $1}'; }
 
-getchar       (){ eval $1="'$(dd bs=1 count=1 2>/dev/null)'"; }
-__getchar     (){ dd bs=1 count=1 2>/dev/null; }
-
-respawn(){
+_respawn_(){
   local t=$(date +%s) r=0
   while "$@"
   do if [ $t -eq $(date +%s) ]

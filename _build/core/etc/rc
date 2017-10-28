@@ -48,67 +48,62 @@ gear0xINIT(){ local B=/bin/busybox; exec 2>&1
   export USPLASH_TTY=$($B tty) USPLASH_SOCK=/run/usplash
   local header="$(printf "\e[1;44;33m gear$(cat /etc/version)/$(cat /etc/release) [ram]")"
   local footer="$(printf "\e[1;44;34m gear$(cat /etc/version) a minimal hackable OS")"
-  mount -t devtmpfs null /dev
-  mount -t proc     proc /proc
-  exec usplash \
-    -mS/run/block/ramfs/overlay \
-    -a 'INIT_MODULE=gear0xSTART . /etc/rc'\
+  . /lib/u/overlay; ubasemounts
+  exec usplash -m \
+    -e 'INIT_MODULE=gear0xSTART . /etc/rc'\
     -H "$header" -F "$footer"; }
 
+_status_(){ usplash -i aaaa_boot -t "$@" -a: & usplash -l "$@" & }
+
 gear0xSTART(){ gear0xSPLASH
-  . /lib/u/overlay; overlay_basemounts
-  # verbosity
-  sysctl -w kernel.printk="3 4 1 3" >/dev/null 2>&1
+  { _status_ "init: env"
+  set_hostname
+  sysctl -w kernel.printk="3 4 1 3"
   ln    -sf /proc/mounts /etc/mtab
-  stty  -F $USPLASH_TTY speed 115200   >/dev/null 2>&1
-  ln -sf $1/run $1/tmp # i hate /tmp but it's still hardcoded in some debian packages
-  # colors
-  local clr=$(printf '\x1b[0m')
-  local red=$(printf '\x1b[1;41;30m')
-  local grn=$(printf '\x1b[1;42;30m')
-  local yel=$(printf '\x1b[1;43;30m')
-  # load kmods
-  local mod; for mod in virtio_input ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
+  stty  -F $USPLASH_TTY speed 115200
+  # i hate /tmp but it's still hardcoded in some debian packages
+  ln -sf $1/run $1/tmp; } >/dev/null 2>&1
+
+  { _status_ "init: early kmods"; modprobe -ab \
+    virtio_gpu virtio_input \
+    ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
     dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
     usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
     mmc_block fat vfat isofs md_mod thermal sd_mod sg efivars
-  do modprobe $mod >/dev/null 2>&1
-  done
+   } >/dev/null 2>&1 &
 
-  set_hostname
-  hotplug
-
-  modprobe virtio_gpu
-  ( while sleep 1; do usplash -w zzz_clock -t "$(printf "\e[43;30m %s \e[0m" "$(date)")"; done; ) & # magic clock
-
+  { _status_ "init: menu"
+  # ( while sleep 1; do usplash -w zzz_clock -t "$(printf "\e[43;30m %s \e[0m" "$(date)")"; done; ) & # magic clock
   usplash -i aboot         -t " $yel booting $clr [ enter: rescue console ] "  -a "INIT_MODULE=gear0xUSPLASH_TO_RESCUE . /etc/rc"
   usplash -i aboot:bash    -t " $grn bash    $clr [ plain ] "                  -a "openvt -sc 2 /bin/bash"
   usplash -i aboot:tmux    -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"
   usplash -i acrypto       -t " $grn crypto  $clr [ boot ] "                   -a "openvt -sc 3 /bin/cryptomount"
   usplash -i ainstall      -t " $grn install $clr [ debootstrap ] "            -a "openvt -sc 3 /bin/install-gear"
   usplash -i zreboot       -t " $red reboot  $clr "                            -a "reboot -f"
-  usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"
+  usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"; } &
+  gear0xHOTPLUG; }
 
-  usplash -l "start $yel dropbear $clr"
-  gear0xSSH
+gear0xHOTPLUG(){
+  _status_ "init: start $yel hotplug $clr";
+  hotplug
+  overlay_mount && { _status_ "init: start $yel overlay $clr"; return 0; }
+  echo /bin/hotplug_event >/proc/sys/kernel/hotplug; hotplug &
+  gear0xREADY; }
 
-  usplash -l "start $yel rc.d $clr"
+gear0xREADY(){
+  _status_ "init: start $yel dropbear $clr"; gear0xSSH
+  _status_ "init: start $yel rc.d $clr"
   for lib in $(ls /etc/rc.d|sort) # run rc-scripts
   do
     usplash -l "start $yel rc.d/$lib $clr"
     run_rc $lib
   done
 
+  wait
+  usplash -d aaaa_boot
   usplash -d aboot:tmux
   usplash -i aboot -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"
-
-  usplash -l "gear$(cat /etc/version)/$(cat /etc/release) $grn ready $clr"
-
-  read forever
-  usplash -i aboot:bash    -t " $grn bash    $clr [ plain ] "                  -a "openvt -sc 2 /bin/bash"
-  if [ $$ -eq 1 ]    # if we are still the init process, it's our responsibility
-  then gear0xRESCUE; fi;
-} # to spawn a shell. else the kernel would panic. (stupid :D)
+  usplash -l "gear$(cat /etc/version)/$(cat /etc/release) $grn ready $clr"; }
 
 gear0xRESCUE(){
   export OS_MODE=rescue
@@ -136,6 +131,12 @@ gear0xSSH(){ { local p=/run/net/dropbear
     -E -P $p/pid \
     >$p/log 2>&1
   usplash -i ssh -t " ssh: $key " -a ''; } & }
+
+# colors
+local clr=$(printf '\x1b[0m')
+local red=$(printf '\x1b[1;41;30m')
+local grn=$(printf '\x1b[1;42;30m')
+local yel=$(printf '\x1b[1;43;30m')
 
 . /lib/u/gear
 

@@ -26,13 +26,13 @@
 #                                                                                   ██    ██    ██    ██ ██           ██
 #                                                                                    ██████     ██    ██ ███████ ███████
 
-      _udg_(){ udg -D -F "$HINT" -o "CTRL_Q" -a "$ABORT" -o "CTRL_B" -a "$BACK" "$@"; }
+      _udg_(){ udg -F "$HINT" -o "CTRL_Q" -a "$ABORT" -o "CTRL_B" -a "$BACK" "$@"; }
       _opt_(){ echo $OPTION | grep -qI $1; }
       _nko_(){ _opt_ k && return 1; _opt_ $1; }
  _opt_bool_(){ _opt_ $1 && echo true || echo false; }
    _chroot_(){ chroot "$@"; }
      _fail_(){ echo $1 >&2; exit 1; }
-   _status_(){ usplash -i ainstall -t " $@"; echo $@; }
+   _status_(){ usplash -i ainstall -t " $@"; $VERBOSE && echo $@; }
 
 _step_init_(){
   export "STEP_FIRST_KEY"="${1}"
@@ -67,7 +67,7 @@ _subtask_(){
     while read line
       do [ -n "$line" ] && {
         line=$(echo $line|sed 's/I: Retrieving /get: /;s/I: //')
-        echo "$line" # >> /run/install/debootstrap.log
+        # $VERBOSE && echo "$line" # >> /run/install/debootstrap.log
         usplash -i ainstall -t " $1: $line"; }
     done; usplash -d ainstall; }
 
@@ -130,7 +130,7 @@ av 0 Verbose Logging'); }
 format_devices(){
   while _opt_ ap
   do _select_device_ -pl "[Partition] select device"    DEVICE
-     reset; fdisk $DEVICE; sync
+     reset; _umount_ $DEVICE; fdisk $DEVICE; sync
      _udg_ -H "$(printf "\e[41;30m  Done partitioning? $DEVICE")" -y && break
   done; }
 
@@ -160,9 +160,14 @@ _setup_fs_(){
   local mountpoint= block="$1" mapdev="$2" dest="$3" pass="$4" create="$5" mkfs="$6"
   _luks_format_; _luks_verify_; _luks_open_; _mkfs_; _mount_; }
 _umount_(){
-  cat /proc/mounts | grep "^$1 " | awk '{print $2}' | while read mountpoint
-  do _status_ "fs:$mapdev umount $block ($mountpoint)"
-     umount -f "$mountpoint" || _fail_ "failed to unmount: $mountpoint ($1)"
+  local basedev=$(echo $1|sed 's/[0-9]*$//')
+  _status_ "fs:$mapdev _umount_ ${basedev}*"
+  for i in $(ls $basedev*)
+  do
+    cat /proc/mounts | grep "^$i " | awk '{print $2}' | while read mountpoint
+    do _status_ "fs:$mapdev umount $i ($mountpoint)"
+       umount -f "$mountpoint" || _fail_ "failed to unmount: $mountpoint ($i)"
+    done;
   done; }
 _luks_format_(){ if $create; then
   _status_ "fs:$mapdev: create ($block:$(printf "%s" "$pass"|wc -c))"
@@ -176,8 +181,8 @@ _luks_open_(){ if [ -n "$pass" ]; then
 _mkfs_(){ if $mkfs; then
   _status_ "fs:$mapdev: mkfs"
   if [ -n "$pass" ]
-  then mkfs.ext4 /dev/mapper/$mapdev || _fail_ "fs:$mapdev:error: mkfs"
-  else mkfs.ext4              $block || _fail_ "fs:$mapdev:error: mkfs"
+  then mkfs.ext4 -F /dev/mapper/$mapdev || _fail_ "fs:$mapdev:error: mkfs"
+else mkfs.ext4 -F                $block || _fail_ "fs:$mapdev:error: mkfs"
   fi; fi; }
 _mount_(){
   _status_ "fs: mkdir $mapdev $dest"; mkdir -p $dest                 || _fail_ "fs: $mapdev-error: mkdir $dest"
@@ -280,6 +285,7 @@ export MIRROR= VERSION=
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LD_LIBRARY_PATH=/lib/$(cat /etc/arch)
 export DEBIAN_FRONTEND=noninteractive
+export VERBOSE=false
 
 [ -z "$VERSION" ] && VERSION=sid
 [ -z "$MIRROR"  ] && MIRROR=http://ftp.de.debian.org/debian
@@ -289,7 +295,7 @@ export DEBIAN_FRONTEND=noninteractive
 ldconfig
 rm -f /system
 
-test -f /bin/wget.bin || wget 2>&1 | greq -q \-T && {
+test -f /bin/wget.bin && {
   mv /bin/wget /bin/wget.bin
   printf '#!/bin/sh
 usplash -l "busybox wget -T10 $*"
@@ -298,6 +304,7 @@ busybox wget -T10 $@
 
 if mkdir -p /run/install && query_install
 then (
+  _opt_ av && VERBOSE=true
   printf "\e[32;1m% 12s\e[0m '%s'\n" MASTERKEYFS "$MASTERKEYFS"
   printf "\e[32;1m% 12s\e[0m '%s'\n" ROOTFS "$ROOTFS"
   printf "\e[32;1m% 12s\e[0m '%s'\n" HOMEFS "$HOMEFS"

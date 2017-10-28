@@ -1,7 +1,7 @@
 #!/bin/sh
 { [ -f "$TARGET/.gear/extension" ] || return 0
-  usplash -l "loading extension [$(cat $TARGET/.gear/extension)] "
-  usplash -O "$TARGET" -a '. /lib/u/gear
+  usplash -l "found extension [$(cat $TARGET/.gear/extension)]($TARGET) "
+  overlay_queue "$TARGET" '. /lib/u/gear
     usplash -l "$(ls $TARGET/etc/rc.d|sort|tr '\n' ',')"
     for lib in $(ls $TARGET/etc/rc.d|sort)
     do usplash -l "start $yel rc.d/$lib $clr"''; run_rc $lib

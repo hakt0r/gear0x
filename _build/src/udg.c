@@ -154,7 +154,7 @@ void select_init(void){ int count = 0; char *line, *last;
   for(;line!=last;last=line,line=str_next(line,'\n'))
     umap_setI(ITEM_MAP,count++,new_UListItem(line,line,line,false),NULL);
   CUR = MIN(count,MAX(0,DEFAULT?atoi(DEFAULT):0));
-  io_bind(map); VIEW_resize(INPUT_LEN = count); }
+  INPUT_LEN = count - 1; io_bind(map); VIEW_resize(count); }
 
 /*
                                                                         ██████ ██   ██  ██████   ██████  ███████ ███████
@@ -201,7 +201,7 @@ void choose_init(void){
   asprintf(&off," [\e[1;32m \e[0m] %s ",title);
   umap_setI(ITEM_MAP,count++,new_UListItem(key,on,off,atoi(val)==1?true:false),NULL); goto READ_LINE;
   READ_DONE:
-  io_bind(map); VIEW_resize(INPUT_LEN = count); }
+  INPUT_LEN = count - 1; io_bind(map); VIEW_resize(count); }
 
 /*
                                                                                          ███    ███  █████  ██ ███    ██

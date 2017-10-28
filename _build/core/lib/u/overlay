@@ -1,41 +1,13 @@
 #!/bin/sh
 
-overlay_init(){
-  modprobe overlay
-  mkdir -p /run /dev/ /sys /proc
-  ln -s /run /tmp
-  mount -t tmpfs tmpfs /run
-  local RUNDIR=/run/block/ramfs
-  mkdir -p $RUNDIR/work $RUNDIR/upper $RUNDIR/overlay $RUNDIR/mount /run/log /run/overlay
-  mount -o bind / $RUNDIR/mount
-  mount -t overlay -o lowerdir=$RUNDIR/mount,upperdir=$RUNDIR/upper,workdir=$RUNDIR/work overlay $RUNDIR/overlay
-  mount -o bind /run $RUNDIR/overlay/run
-  mount -o bind /    $RUNDIR/overlay/$RUNDIR/mount
-  mount -o bind /    $RUNDIR/overlay/$RUNDIR/mount
-  touch $RUNDIR/mounted; }
+uswitchroot(){
+  reset
+  ubasemounts "$1"
+  mkdir -p /system
+  mount -o move "$1" /system
+  exec /bin/switch_root /system "$2"; }
 
-overlay_mount(){
-  local TARGET="$1"
-  local OVLDIR=/run/overlay
-  local OVERLAY=$(overlay_mounted):$TARGET
-  local RUNDIR=$(dirname  $TARGET)
-  local RUNDEV=$(basename $RUNDIR)
-  [ -f $RUNDIR/mounted ] && return 0; touch $RUNDIR/mounted
-  mkdir -p $RUNDIR/previous $RUNDIR/work $RUNDIR/upper $RUNDIR/overlay;
-  mount -o bind / $RUNDIR/previous
-  mount -t overlay -o lowerdir=$OVERLAY,upperdir=$RUNDIR/upper,workdir=$RUNDIR/work overlay $RUNDIR/overlay
-  awk 'function bind(target){ system("mount -o bind "target" '"$RUNDIR"'/overlay"target) }
-  !( $2 == "/" || $2 == "/proc" || $2 == "/sys" || $2 == "/dev" || $2 == "/dev/pts" ){ d[i++] = $2; }
-  END{ for(x=0;x<i;x++) bind(d[x]) }' /proc/mounts
-  overlay_basemounts $RUNDIR/overlay; }
-
-overlay_mount_post(){
-  RUNDIR=$(dirname  "$1")
-  umount $RUNDIR/overlay;
-  umount $RUNDIR/previous && rm -rf $RUNDIR/previous; }
-
-overlay_basemounts(){
-  # basemounts
+ubasemounts(){
   mount -t proc     null   $1/proc    2>/dev/null
   mount -t sysfs    null   $1/sys     2>/dev/null
   mount -t devtmpfs null   $1/dev     2>/dev/null
@@ -45,11 +17,65 @@ overlay_basemounts(){
   ln -sf $1/proc/self/fd/1 $1/dev/stdout
   ln -sf $1/proc/self/fd/2 $1/dev/stderr; }
 
-overlay_baseumounts(){
-  umount /proc
-  umount /dev/pts
-  umount /dev
-  umount /sys; }
+overlay_init(){
+  modprobe overlay
+  mkdir -p /run /dev/ /sys /proc
+  ln -s /run /tmp
+  mount -t tmpfs tmpfs /run
+  local RUNDIR=/run/block/ramfs
+  mkdir -p $RUNDIR/mount /run/log /run/overlay
+  mount -o bind / $RUNDIR/mount
+  touch $RUNDIR/mounted; }
 
-overlay_mounted(){
+overlay_queue(){
+  local t=$(basename $(_mountpoint_dev_ "$1"))
+  mkdir -p /run/overlay/queue/$t
+  usplash -l "overlay_queue: $1 $t"
+  printf "%s"   "$1" >> /run/overlay/queue/$t/target
+  printf "%s\n" "$2" >> /run/overlay/queue/$t/script; }
+
+overlay_mount(){
+  local OVERLAY=$(_overlay_mounted_)
+  local MOUNT="/overlay"
+  local NUM=
+  local RUNDIR=
+  local TARGET=
+  local t=
+  local w=false
+  exec >>$RUNOV/log.pre 2>&1
+  _overlay_num_
+  rm -rf $RUNOV/post; mkdir -p $RUNOV/post $MOUNT $RUNOV/work$NUM $RUNOV/upper$NUM
+  for t in $(ls $RUNOV/queue)
+  do
+    TARGET=$(cat $RUNOV/queue/$t/target)
+    RUNDIR=$(dirname $TARGET)
+    [ -f $RUNDIR/mounted ] && continue; touch $RUNDIR/mounted; w=true
+    cat $RUNOV/queue/$t/script > $RUNOV/post/$t
+    OVERLAY=$OVERLAY:$TARGET
+  done; $w || return 1
+  mount -t overlay -o lowerdir=$OVERLAY,upperdir=$RUNOV/upper$NUM,workdir=$RUNOV/work$NUM overlay $MOUNT &&
+  mount -t proc  null $MOUNT/proc
+  mount -t sysfs null $MOUNT/sys
+  mount -o move /dev  $MOUNT/dev
+  mount -o move /run  $MOUNT/run
+  cat $MOUNT/proc/mounts
+  umount /proc; umount /sys
+  USPLASH_SOCK=$MOUNT$USPLASH_SOCK usplash -S "$MOUNT" -a ". /lib/u/overlay; overlay_mount_post"
+  return 0; }
+
+overlay_mount_post(){
+  local RUNOV="/run/overlay"
+  local OVLDIR=/overlay
+  exec >>$RUNOV/log.post 2>&1
+  sh $RUNOV/post/*; rm -rf $RUNOV/post
+  cat /proc/mounts
+  INIT_MODULE=gear0xHOTPLUG exec /etc/rc; }
+
+_overlay_mounted_(){
   ls /run/block/*/mounted | sed 's/ed$//' | awk 'BEGIN{ getline; printf $1 }{ printf ":%s" $1 }'; }
+_overlay_num_(){
+  [ -f $RUNOV/num ] && { NUM=$(( $(cat $RUNOV/num) + 1 )); echo $NUM > $RUNOV; } || { NUM=0; echo 0 > $RUNOV/num; }; }
+_mountpoint_dev_(){
+  awk '($2=="'"$1"'"){print $1}' /proc/mounts; }
+
+export RUNOV="/run/overlay"; mkdir -p $RUNOV
