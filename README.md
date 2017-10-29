@@ -1,8 +1,6 @@
 # gear0x
 gear0x is, in a nutshell, a bootdisk ready for expansion based on debian and the Linux kernel.
-
 Heavily inspired by The Core Project and the sum of my frustration, essentially :)
-
 It is menu-driven, but allows you to drop to a comfy' tmux/bash if you ever feel the need.
 
 ## In it's current state the minimum OS enables you to:
