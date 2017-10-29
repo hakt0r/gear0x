@@ -43,12 +43,12 @@ gear0xINIT(){ local B=/bin/busybox; exec 2>&1
   $B touch /test 2>/dev/null && $B rm /test || $B mount -o remount,rw /  # remount root if necessary
   $B --install -s /bin
   # init overlay
-  . /lib/u/overlay; overlay_init
+  . /lib/u/overlay; overlay_init; ubasemounts
   # exec /bin/taskd daemon /etc/rc.d
+  echo /bin/hotplug_event >/proc/sys/kernel/hotplug
   export USPLASH_TTY=$($B tty) USPLASH_SOCK=/run/usplash
   local header="$(printf "\e[1;44;33m gear$(cat /etc/version)/$(cat /etc/release) [ram]")"
   local footer="$(printf "\e[1;44;34m gear$(cat /etc/version) a minimal hackable OS")"
-  . /lib/u/overlay; ubasemounts
   exec /bin/usplash -m \
     -e 'INIT_MODULE=gear0xSTART . /etc/rc'\
     -H "$header" -F "$footer"; }
@@ -65,32 +65,36 @@ gear0xSTART(){ gear0xSPLASH
   ln -sf $1/run $1/tmp; } >/dev/null 2>&1
 
   { _status_ "init: early kmods"; modprobe -ab \
-    virtio_gpu virtio_input \
-    ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
-    dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
-    usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
-    mmc_block fat vfat isofs md_mod thermal sd_mod sg efivars
-   } >/dev/null 2>&1 &
+    ext4 usb_storage squashfs overlay usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
+    mmc_block fat vfat isofs md_mod thermal sd_mod sg \
+    xts aes ctr cbc sha256 \
+    dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep efivars \
+    virtio_gpu virtio_input
+   } >/dev/null 2>&1
 
-  { _status_ "init: menu"
-  # ( while sleep 1; do usplash -w zzz_clock -t "$(printf "\e[43;30m %s \e[0m" "$(date)")"; done; ) & # magic clock
-  usplash -i aboot         -t " $yel booting $clr [ enter: rescue console ] "  -a "INIT_MODULE=gear0xUSPLASH_TO_RESCUE . /etc/rc"
-  usplash -i aboot:bash    -t " $grn bash    $clr [ plain ] "                  -a "openvt -sc 2 /bin/bash"
-  usplash -i aboot:tmux    -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"
-  usplash -i acrypto       -t " $grn crypto  $clr [ boot ] "                   -a "openvt -sc 3 /bin/cryptomount"
-  usplash -i ainstall      -t " $grn install $clr [ debootstrap ] "            -a "openvt -sc 3 /bin/install-gear"
-  usplash -i zreboot       -t " $red reboot  $clr "                            -a "reboot -f"
-  usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"; } &
-  gear0xHOTPLUG; }
+   touch /run/overlay/lock
+   gear0xMENU &
+   gear0xHOTPLUG; }
+
+ gear0xMENU(){
+   _status_ "init: menu"
+   usplash -i aboot         -t " $yel booting $clr [ enter: rescue console ] "  -a "INIT_MODULE=gear0xUSPLASH_TO_RESCUE . /etc/rc"
+   usplash -i aboot:bash    -t " $grn bash    $clr [ plain ] "                  -a "openvt -sc 2 /bin/bash"
+   usplash -i aboot:tmux    -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"
+   usplash -i acrypto       -t " $grn crypto  $clr [ boot ] "                   -a "openvt -sc 3 /bin/cryptomount"
+   usplash -i ainstall      -t " $grn install $clr [ debootstrap ] "            -a "openvt -sc 3 /bin/install-gear"
+   usplash -i zreboot       -t " $red reboot  $clr "                            -a "reboot -f"
+   usplash -i zreboot:halt  -t " $red halt    $clr "                            -a "halt -f"; }
 
 gear0xHOTPLUG(){
   _status_ "init: start $yel hotplug $clr";
   hotplug
-  overlay_mount && { _status_ "init: start $yel overlay $clr"; return 0; }
-  echo /bin/hotplug_event >/proc/sys/kernel/hotplug; hotplug &
+  FORCE=true overlay_mount && { _status_ "init: start $yel overlay $clr"; return 0; }
   gear0xREADY; }
 
 gear0xREADY(){
+  rm /run/overlay/lock
+
   _status_ "init: start $yel dropbear $clr"; gear0xSSH
   _status_ "init: start $yel rc.d $clr"
   for lib in $(ls /etc/rc.d|sort) # run rc-scripts
@@ -99,7 +103,6 @@ gear0xREADY(){
     run_rc $lib
   done
 
-  wait
   usplash -d aaaa_boot
   usplash -d aboot:tmux
   usplash -i aboot -t " $grn bash    $clr [ tmux ] "                   -a "openvt -sc 2 /bin/tmux"

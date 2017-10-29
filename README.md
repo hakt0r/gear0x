@@ -9,9 +9,10 @@ It is menu-driven, but allows you to drop to a comfy' tmux/bash if you ever feel
   - Rapidly integrate tools using squashfs overlays
 
 ## Building
-    sudo apt install qemu-kvm qemu-image # for testing
     git clone https://github.com/hakt0r/gear0x
     cd gear0x
+    sudo sh _build/deps
+    sudo sh _build/deps.test # for testing
     sudo make deps build ramfs test
 
 ## License

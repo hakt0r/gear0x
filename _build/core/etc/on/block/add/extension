@@ -7,4 +7,5 @@
     do usplash -l "start $yel rc.d/$lib $clr"''; run_rc $lib
     done
     usplash -l "extension: $(cat $TARGET/.gear/extension) loaded rc=$(ls $TARGET/etc/rc.d|sort|tr '\n' ',')"';
+  overlay_mount
   return 1; }

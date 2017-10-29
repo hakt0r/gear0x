@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 #  Buildtools for GEAR0x/cazuza
 #
@@ -38,6 +38,7 @@ _help(){ printf "
 "; }
 
 _tool(){ local _loop_
+  export DEBIAN_FRONTEND=noninteractive
   export BWD=$PWD BUILD=$PWD/_build HOSTARCH=$(uname -m)
   export BUSYBOX SOURCES DESTDIR SYSROOT DEVICE DESTARCH
   export DEBIAN DEBIAN_REPO CONTRIB=$BWD/contrib
@@ -68,7 +69,7 @@ _tool(){ local _loop_
   . $BUILD/arch/$DESTARCH/setup    # include arch/$DESTARCH files
   SOURCES=$BWD/$DESTARCH           # set DESTARCH-dependent variables
   DESTDIR=$SOURCES/stage
-  DEBIAN=$SOURCES/debian
+  { [ -z "$FORCE_CHROOT" ] && [ "$DESTARCH" = "$HOSTARCH" ]; } && DEBIAN=/ || DEBIAN=$SOURCES/debian
   SYSROOT=$SOURCES/sysroot
   mkdir -p $SOURCES $SYSROOT       # create $SOURCES (and dirs needed)
   _arch_hook crossinit             # activate cross compiler (if needed)

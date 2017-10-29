@@ -35,6 +35,7 @@ overlay_queue(){
   printf "%s\n" "$2" >> /run/overlay/queue/$t/script; }
 
 overlay_mount(){
+  [ -f /run/overlay/lock -a -z "$FORCE" ] && return 0
   local OVERLAY=$(_overlay_mounted_)
   local MOUNT="/overlay"
   local NUM=

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 deps(){
-  _depend_apt dropbear; }
+  _depend_apt dropbear dropbear-bin; }
 
 ramfs(){ local DESTDIR=$RAMFS
   _steal_app dropbear dropbearkey dbclient

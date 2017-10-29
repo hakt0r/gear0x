@@ -12,7 +12,7 @@ distclean(){ [ -z "$SOURCES" ] && return
   rm -rf $SOURCES/linux-headers $SOURCES/linux; }
 
 clean(){ [ -z "$SOURCES" ] && return
-  rm -rf $SOURCES/linux.img; }
+  rm -rf $SOURCES/firmware.img; }
 
 deps(){
   _is_app bc || apt-get install bc build-essential
@@ -31,9 +31,9 @@ build(){
   _arch_hook linux_install; }
 
 install(){
-  [ -f $SOURCES/linux.img ] && return
+  [ -f $SOURCES/firmware.img ] && return
   mkdir -p $SOURCES/linux/.gear
   echo linux_nonfree > $SOURCES/linux/.gear/firmware
-  ( cd $SOURCES/linux && mksquashfs ./ $SOURCES/linux.img -all-root -comp xz; )
-  printf "${_BPP}\e[1;41m $SOURCES/linux.img \e[1;41m %s \e[0m\n" \
-    $KERNEL_VERSION $DESTARCH $(du -h $SOURCES/linux.img|cut -f1) >&2; }
+  ( cd $SOURCES/linux && mksquashfs ./ $SOURCES/firmware.img -all-root -comp xz; )
+  printf "${_BPP}\e[1;41m $SOURCES/firmware.img \e[1;41m %s \e[0m\n" \
+    $KERNEL_VERSION $DESTARCH $(du -h $SOURCES/firmware.img|cut -f1) >&2; }

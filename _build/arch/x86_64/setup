@@ -4,6 +4,9 @@ export DESTARCH_DEBIAN=amd64
 export DESTARCH_MULTI=x86_64-linux-gnu
 export KERNEL_DEBS="http://kernel.ubuntu.com/~kernel-ppa/mainline/v4.14-rc2/"
 
+export ARCH_KMODS="virtio virtio_ring virtio_net virtio_scsi virtio_blk virtio_pci "\
+"virtio_input virtio_gpu qxl ttm e1000 syscopyarea sysfillrect sysimgblt i2c_piix4 pcspkr"
+
 linux_deps_x86_64(){ [ -z "$SOURCES" ] && return
   _depend_deb_from linux         "$KERNEL_DEBS" image   64 generic
   _depend_deb_from linux-headers "$KERNEL_DEBS" headers 64 generic;

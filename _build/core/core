@@ -25,9 +25,7 @@ ramfs(){ local DESTDIR=$RAMFS
   cp -rfv $DEBIAN/usr/lib/locale  $DESTDIR/lib/ 2>&1 | _dots
   cp -rfv $DEBIAN/sbin/ldconfig   $DESTDIR/bin/ 2>&1 | _dots
   ln -s / $DESTDIR/usr
-  _steal_kmods $DESTDIR \
-    virtio virtio_ring virtio_net virtio_scsi virtio_blk virtio_pci virtio_input virtio_gpu \
-    qxl ttm e1000 syscopyarea sysfillrect sysimgblt i2c_piix4 pcspkr \
+  _steal_kmods $DESTDIR $ARCH_KMODS \
     ext4 usb_storage squashfs overlay xts aes ctr cbc sha256 \
     dm_crypt crc32 ccm lib80211_crypt_tkip lib80211_crypt_ccmp lib80211_crypt_wep \
     usbhid evdev xhci_hcd sdhci sdhci_acpi hid_multitouch i2c_hid \
@@ -60,34 +58,6 @@ postramfs(){ local DESTDIR=$RAMFS
   find . | cpio -H newc -o | gzip >$RAMFS.gz; ) &&
   cp $RAMFS.gz $SOURCES/release/ && sync; }; }
 
-stick(){
-  [ -z "$DEVICE" ] && { echo no DEVICE:"'$DEVICE'"; return 0; }
-  [ -w "$DEVICE" ] || { echo nw DEVICE:"'$DEVICE'"; return 1; }
-  dd if=/dev/zero of=$DEVICE bs=1M count=1      &&
-  cat /usr/lib/SYSLINUX/mbr.bin >$DEVICE        &&
-  sudo parted -ms $DEVICE mktable msdos         &&
-  sudo parted -ms $DEVICE mkpart primary 1 200M &&
-  sudo parted $DEVICE set 1 boot on             &&
-  _arch_hook bootfs                             &&
-  mkdir -p mnt                                  &&
-  mount ${DEVICE}1         mnt                  &&
-  cp -rf $DESTDIR/*        mnt/                 &&
-  mkdir -p                 mnt/boot             &&
-  cp    $KERNEL_IMAGE      mnt/boot/            &&
-  cp    $RAMFS.gz          mnt/boot/            &&
-  cp    $SOURCES/release/* mnt/boot/            &&
-  _arch_hook bootloader && sync && umount mnt; }
-
-bootfs_default(){
-  mkfs.ext2 ${DEVICE}1; }
-bootloader_default(){ printf \
-'DEFAULT linux\nLABEL linux\n'\
-'KERNEL /boot/%s\n'\
-'APPEND quiet init=/etc/rc norootdev initrd=/boot/%s'\
- $(basename $KERNEL_IMAGE) $(basename $RAMFS.gz)\
-> mnt/boot/extlinux.conf &&
-  extlinux -i mnt/boot; }
-
 preinstall(){
   _arch_hook install
   mkdir -p $DESTDIR/.gear
@@ -101,3 +71,93 @@ image(){
   rm -f  $SOURCES/$EXTENSION.img
   ( cd $DESTDIR; mksquashfs ./ $SOURCES/$EXTENSION.img -all-root -comp xz; )
   printf "${_BPP}\e[1;41m GEAR\e[44m%s\e[45m%s \e[0m $SOURCES/$EXTENSION.img \e[1;41m %s \e[0m\n" $VERSION $RELEASE $(du -h $SOURCES/$EXTENSION.img|cut -f1) >&2; }
+
+upload(){
+  sudo chown -R $USER:$USER $SOURCES/linux
+  ssh root@lua "mkdir -p /var/www/html/gear0x/lastest/$DESTARCH"
+  [ -f "$(dirname $KERNEL_IMAGE)/vmlinux.gz" ] || (
+    printf '[\e[32mkernel\e[0m]' >&2
+    cd $(dirname $KERNEL_IMAGE)
+    gzip -ky $(basename $KERNEL_IMAGE) >&2;
+    mv $(basename $KERNEL_IMAGE).gz vmlinux.gz >&2;
+    scp $(dirname $KERNEL_IMAGE)/vmlinux.gz root@lua:/var/www/html/gear0x/lastest/$DESTARCH/; )
+  printf '[\e[32mramfs\e[0m]' >&2
+  scp $SOURCES/initramfs.gz root@lua:/var/www/html/gear0x/lastest/$DESTARCH/
+  printf '[\e[32mfirmware\e[0m]' >&2
+  # scp $SOURCES/firmware.img root@lua:/var/www/html/gear0x/lastest/$DESTARCH/
+  printf '[\e[32mstick\e[0m]' >&2
+  scp $SOURCES/stick.img.gz root@lua:/var/www/html/gear0x/lastest/$DESTARCH/
+  printf '[\e[32mchmod\e[0m]' >&2
+  ssh root@lua "chmod -R a+r /var/www/html/gear0x/lastest/$DESTARCH"; }
+
+bootfs_default(){
+  mkfs.ext2 ${PART}; }
+
+bootloader_default(){ printf \
+'DEFAULT linux\nLABEL linux\n'\
+'KERNEL /boot/%s\n'\
+'APPEND init=/etc/rc norootdev initrd=/boot/%s'\
+ $(basename $KERNEL_IMAGE) $(basename $RAMFS.gz)\
+> mnt/boot/extlinux.conf &&
+  install-mbr --force $DEVICE &&
+  extlinux -i mnt/boot >&2; }
+
+stick(){
+  [ -z "$DEVICE" ] && { echo no DEVICE:"'$DEVICE'"; return 0; }
+  [ -w "$DEVICE" ] || { echo nw DEVICE:"'$DEVICE'"; return 1; }
+  export PART=${DEVICE}1
+  dd if=/dev/zero of=$DEVICE bs=1M count=1      &&
+  cat /usr/lib/EXTLINUX/mbr.bin >$DEVICE        &&
+  parted -ms $DEVICE mktable msdos              &&
+  parted -ms $DEVICE mkpart primary 1 500M      && # FIXME FIRMWARE-FULL
+  parted $DEVICE set 1 boot on                  &&
+  _arch_hook bootfs                             &&
+  mkdir -p mnt                                  &&
+  mount ${PART}          mnt                 &&
+  cp -rf $DESTDIR/*         mnt/                &&
+  mkdir -p                  mnt/boot            &&
+  cp -rv $SOURCES/linux.img mnt/                && # FIXME FIRMWARE-FULL
+  cp     $KERNEL_IMAGE      mnt/boot/           &&
+  cp     $RAMFS.gz          mnt/boot/           &&
+  cp     $SOURCES/release/* mnt/boot/           &&
+  _arch_hook bootloader && sync && umount mnt; }
+
+update_stick(){
+  [ -z "$DEVICE" ] && { echo no DEVICE:"'$DEVICE'"; return 0; }
+  [ -w "$DEVICE" ] || { echo nw DEVICE:"'$DEVICE'"; return 1; }
+  export PART=${DEVICE}1
+  mkdir -p mnt                                  &&
+  mount ${PART}          mnt                 &&
+  mkdir -p                  mnt/boot            &&
+  rsync -rav $DESTDIR/*         mnt/             &&
+  rsync -rav $SOURCES/linux.img mnt/             && # FIXME FIRMWARE-FULL
+  rsync     $KERNEL_IMAGE      mnt/boot/        &&
+  rsync     $RAMFS.gz          mnt/boot/        &&
+  rsync     $SOURCES/release/* mnt/boot/        &&
+  _arch_hook bootloader && sync && umount mnt; }
+
+softstick(){
+  FILE="$SOURCES/stick.img"
+  DEVICE="/dev/loop0"
+  export PART=${DEVICE}p1
+  ln -s /dev/loop0p1 /dev/loop01
+  fallocate -l 2G $FILE                         &&
+  losetup /dev/loop0 $FILE                      &&
+  dd if=/dev/zero of=$DEVICE bs=1M count=1      &&
+  cat /usr/lib/SYSLINUX/mbr.bin >$DEVICE        &&
+  parted -ms $DEVICE mktable msdos              &&
+  parted -ms $DEVICE mkpart primary 1 200M      &&
+  parted $DEVICE set 1 boot on                  &&
+  kpartx /dev/loop0                             &&
+  _arch_hook bootfs                             &&
+  mkdir -p mnt                                  &&
+  mount ${DEVICE}p1        mnt                  &&
+  cp -rf $DESTDIR/*        mnt/                 &&
+  mkdir -p                 mnt/boot             &&
+  cp    $KERNEL_IMAGE      mnt/boot/            &&
+  cp    $RAMFS.gz          mnt/boot/            &&
+  cp    $SOURCES/release/* mnt/boot/            &&
+  _arch_hook bootloader && sync && umount mnt;
+  rm -f /dev/loop01
+  losetup -d /dev/loop0;
+  sync; gzip $SOURCES/stick.img; }

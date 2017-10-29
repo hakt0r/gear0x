@@ -203,6 +203,7 @@ _depend_deb_from(){ local name="$1" url="$2"; shift 2
   _depend_deb "$name" "$url"; }
 
 _debroot(){
+  [ "$DEBIAN" = "/" ] && return 0
   _arch_hook debroot # else setup $DEBIAN ($DESTARCH debian chroot)
   [ -d $DEBIAN ] && return 0
   SCRIPT=testing
@@ -220,11 +221,16 @@ _depend_apt_host(){
   test -z "$lib" && lib=$1
   which $bin >/dev/null 2>&1 || sudo apt-get install -y --no-install-recommends $lib; }
 
+_depend_apt_lib_host(){
+  local i= need=; for i in $@; do [ -n "$(apt-cache policy $i| grep -i Installed:..none.)" ] && need="$need $i"; done
+  [ -n "$need" ] && apt-get install -y --no-install-recommends $need; }
+
 _depend_apt_lib(){
   local i= need=; for i in $@; do [ -n "$(_exec_debroot "apt-cache policy $i| grep -i Installed:..none.")" ] && need="$need $i"; done
   [ -n "$need" ] && _exec_debroot "apt-get install -y --no-install-recommends $need"; }
 
 _depend_apt(){
+  [ "$DEBIAN" = "/" ] && { _depend_apt_host $@; return $?; }
   local bin=$1 lib=$2
   test -z "$bin" && return 1
   test -z "$lib" && lib=$1
@@ -240,7 +246,7 @@ _steal_kmod(){  local dest="$1"; shift
   local mods="$src/lib/modules/$KERNEL_VERSION"
   [ -f "$mods/modules.dep.bin" ] || {
     printf "\e[1;43;30m depmod -b $src $KERNEL_VERSION \e[0m" >&2
-    $(which depmod) -b "$src"     $KERNEL_VERSION; }
+    $(which depmod) -b "$src" $KERNEL_VERSION; }
   [ -f "$mods/modules.dep" ] || {
     printf "\e[1;43;30m busybox depmod -b $src $KERNEL_VERSION \e[0m" >&2
     $SOURCES/busybox depmod -b "$src" $KERNEL_VERSION; }
@@ -281,7 +287,7 @@ _steal_lib(){ (
   [ -z "$dep" -o "$dep" = 'not' -o -f $DESTDIR/$dep* ] && return 0
   for lib in $LIBS; do
     [ -e $DEBIAN$lib/$dep ] && { LIB=$DEBIAN$lib/$dep; break; }
-    LIB=$(find $DEBIAN$lib | grep -I $dep | head -n1)
+    LIB=$(find $DEBIAN$lib 2>/dev/null | grep -I $dep | head -n1)
     [ -n "$LIB" ] && break
   done
   if   [ -z "$LIB" ]

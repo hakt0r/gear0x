@@ -34,13 +34,15 @@ hotplug(){
   system(mp) }'; wait; }
 
 hotplug_event(){ exec >>/run/hotplug/$SUBSYSTEM.log 2>&1
+  [ -z "$DEVICE" ] && DEVICE=$(basename $DEVNAME)
   echo "($SUBSYSTEM:$ACTION):$UNAME :: @$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"
-  [ -z "$SUBSYSTEM" -o -z "$ACTION" ]      && return 1
+  [ -z "$SUBSYSTEM" -o -z "$ACTION" ]      && { echo no ACTION or SUBSYSTEM; return 1; }
   local hook= dir=/etc/on/$SUBSYSTEM/$ACTION RUNDIR=/run/$SUBSYSTEM/$DEVICE
   local UNAME=$(echo "@$NAME@$DEVICE@$INTERFACE@$(basename $DEVNAME 2>/dev/null)@$(basename $DEVPATH 2>/dev/null)@"|sed 's/^@\+//;s/@.*//')
-  run_hook _${SUBSYSTEM}_${ACTION}_pre     || return 0
-  for hook in $(ls $dir/* 2>/dev/null)
-  do . $hook || return 0; done
+  run_hook _${SUBSYSTEM}_${ACTION}_pre     || { echo pre_hook canceled; return 0; }
+  for hook in $(ls $dir/* | sort 2>/dev/null)
+  do echo HOOK $hook $DEVICE
+    . $hook || { echo HOOK $hook returned 1; return 0; }; done
   run_hook _${SUBSYSTEM}_${ACTION}_default || return 0
   run_hook _${SUBSYSTEM}_${ACTION}_post    || return 0; }
 

@@ -30,10 +30,11 @@ linux_setup_armhf_pi2(){
   export KERNEL_VERSION=$(ls $FIRMWARE/modules | grep v7);
   linux_setup_armhf; }
 
-linux_deps_armhf_pi2(){ linux_deps_armhf_pi; }
+linux_deps_armhf_pi2(){
+  mkdir -p $SOURCES/linux/lib/modules
+  _git_source firmware https://github.com/raspberrypi/firmware
+  ln -sf $SOURCES/firmware/modules/${KERNEL_VERSION} $SOURCES/linux/lib/modules/; }
 linux_deps_armhf_pi(){
-  _git_source firmware https://github.com/raspberrypi/firmware; }
-linux_deps_armhf_bpro(){
   _git_source firmware https://github.com/raspberrypi/firmware; }
 
 crossinit_armhf(){
